@@ -1,0 +1,21 @@
+# Core dependencies
+aiohttp>=3.8.0
+asyncio>=3.4.0
+tiktoken>=0.3.0
+tqdm>=4.64.0
+numpy>=1.21.0
+
+# NLP (for stopwords in request.py)
+nltk>=3.8.0
+
+# Environment variable loading
+python-dotenv>=1.0.0
+
+# Evaluation metrics (paper-compliant)
+rouge-score>=0.1.0
+scikit-learn>=1.0.0
+
+# Note: OpenAI library not needed for MiniMax API
+
+# Project internal
+# prompt.py, request.py, tokens.py in src/

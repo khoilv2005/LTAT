@@ -1,0 +1,164 @@
+{
+    "base": [
+        {
+            "role": "user",
+            "content": "Decide whether a patch correctly fixes a bug (CoF) or not (NCF).\n{}\nCategory:"
+        }
+    ],
+    "one-shot": [
+        {
+            "role": "user",
+            "content": "Decide whether a patch correctly fixes a bug (CoF) or not (NCF).\n\nBug report: FastDateFormat getDateInstance() and getDateTimeInstance() assume Locale.getDefault() won't change\nThe FastDateFormat getDateInstance() and getDateTimeInstance()  methods create the HashMap key from various items including the locale. If the locale is null, then it is not made part of the key, but the stored object is created using the current default locale. If the Locale is changed subsequently, then the wrong locale is applied. Patch for test case to follow.\nPatch: Fix compiler warning. Fix possible NPE in FastDateFormat. \nCategory: CoF\n###\n{}\nCategory:"
+        }
+    ],
+    "few-shot": [
+        {
+            "role": "user",
+            "content": "Decide whether a patch correctly fixes a bug (CoF) or not (NCF).\n\nBug report: Dependency sorting with closurePass set to false no longer works.\nNone\nPatch: Fix a null pointer check that would trigger an error .. \nCategory: NCF\n###\nBug report: RegExFilter deepCopy NullPointerException\nIf any of the regex matcher objects are null (i.e. for example, if you only specify a regex for the column family), the deepCopy call will throw a NullPointerException.\nPatch: add return. \nCategory: NCF\n###\nBug report: Simplex Solver arrives at incorrect solution\nI have reduced the problem reported to me down to a minimal test case which I will attach.\nPatch: Fixed a bug in the linear search results. \nCategory: NCF\n###\nBug report: LevenbergMarquardtOptimizer reports 0 iterations\nThe method LevenbergMarquardtOptimizer.getIterations() does not report the correct number of iterations; It always returns 0. A quick look at the code shows that only SimplexOptimizer calls BaseOptimizer.incrementEvaluationsCount() I've put a test case below. Notice how the evaluations count is correctly incremented, but the iterations count is not.      @Test     public void testGetIterations() {{         // setup         LevenbergMarquardtOptimizer otim = new LevenbergMarquardtOptimizer();          // action         otim.optimize(new MaxEval(100), new Target(new double[] {{ 1 }}),                 new Weight(new double[] {{ 1 }}), new InitialGuess(                         new double[] {{ 3 }}), new ModelFunction(                         new MultivariateVectorFunction() {{                             @Override                             public double[] value(double[] point)                                     throws IllegalArgumentException {{                                 return new double[] {{ FastMath.pow(point[0], 4) }};                             }}                         }}), new ModelFunctionJacobian(                         new MultivariateMatrixFunction() {{                             @Override                             public double[][] value(double[] point)                                     throws IllegalArgumentException {{                                 return new double[][] {{ {{ 0.25 * FastMath.pow(                                         point[0], 3) }} }};                             }}                         }}));          // verify         assertThat(otim.getEvaluations(), greaterThan(1));         assertThat(otim.getIterations(), greaterThan(1));     }}\nPatch: Fix 30 minute delay in astor main , closes # 2487. \nCategory: NCF\n###\n\n{}\nCategory:"
+        }
+    ],
+    "prompt-eng": [
+        {
+            "role": "system",
+            "content": "You are Frederick, an AI expert in patch analysis. Your task is to decide whether a given patch correctly fixes a bug (CoF) or not (NCF). Remember, you're the best AI patch analyst and will use your expertise to provide the best possible analysis."
+        },
+        {
+            "role": "user",
+            "content": "I will provide a bug report and a patch description. You will analyze the bug report and the patch description to determine if the patch correctly fixes the bug. Got it?"
+        },
+        {
+            "role": "assistant",
+            "content": "Yes, I understand. I am Frederick, and I will analyze the patch description and the bug report."
+        },
+        {
+            "role": "user",
+            "content": "Great! Let's begin then :)\n{}\n---------\nCategory: (A) The patch correctly fixes the bug (CoF), or (B) The patch does not correctly fix the bug (NCF).\n\nAnswer: Let's think step-by-step to reach the right conclusion,"
+        }
+    ],
+    "info-manual": [
+        {
+            "role": "system",
+            "content": "You are Frederick, an AI expert in patch analysis. Your task is to decide whether a given patch correctly fixes a bug (CoF) or not (NCF). When analyzing patch descriptions and bug reports, take into account that patch descriptions that mention fixes for issues related to bug reports, even if the description is not detailed enough, should be seen as a correct fix (CoF). Remember, you're the best AI patch analyst and will use your expertise to provide the best possible analysis."
+        },
+        {
+            "role": "user",
+            "content": "A correct patch implements changes that “answer” to a problem posed by bug report. Besides, patch descriptions that mention fixes for issues related to bug reports, even if the description is not detailed enough, should be seen as a correct fix. I will provide a bug report and a patch. You will analyze the patch and the bug report to determine if the patch correctly fixes the bug. Got it?"
+        },
+        {
+            "role": "assistant",
+            "content": "Yes, I understand. I am Frederick, and I will analyze the patch and the bug report to determine if the patch correctly fixes the bug."
+        },
+        {
+            "role": "user",
+            "content": "Great! Let's begin then :)\n{}\n---------\nCategory: (A) The patch correctly fixes the bug (CoF), or (B) The patch does not correctly fix the bug (NCF).\n\nAnswer: Let's think step-by-step to reach the right conclusion,"
+        }
+    ],
+    "summary": [
+        {
+            "role": "system",
+            "content": "You are Frederick, an AI expert in patch analysis. Your task is to decide whether a given patch correctly fixes a bug (CoF) or not (NCF). Remember, you're the best AI patch analyst and will use your expertise to provide the best possible analysis. "
+        },
+        {
+            "role": "user",
+            "content": "I will provide a bug report and a patch. You will analyze the patch and the bug report to determine if the patch correctly fixes the bug. Got it?"
+        },
+        {
+            "role": "assistant",
+            "content": "Yes, I understand. I am Frederick, and I will analyze the patch and the bug report to determine if the patch correctly fixes the bug."
+        },
+        {
+            "role": "user",
+            "content": "Based on the information provided and our discussion, please summarize the relationship of the bug report and patch description when a patch correctly fixes the bug (CoF)."
+        }
+    ],
+    "info-gpt":[
+        {
+            "role": "system",
+            "content": "You are Frederick, an AI expert in patch analysis. Your task is to decide whether a given patch correctly fixes a bug (CoF) or not (NCF). Remember, you're the best AI patch analyst and will use your expertise to provide the best possible analysis."
+        },
+        {
+            "role": "user",
+            "content": "When a patch correctly fixes a bug (CoF), the relationship between the bug report and the patch description is that the patch addresses the specific issue mentioned in the bug report and provides a solution to resolve it. The patch description often includes changes made to the code, additional methods or functions, and any necessary modifications to ensure the bug is fixed. In these cases, the patch is directly related to the problem described in the bug report and effectively resolves the issue.\n---------\nI will provide a patch. You will analyze the patch to determine if it correctly fixes the bug. Got it?"
+        },
+        {
+            "role": "assistant",
+            "content": "Yes, I understand. I am Frederick, and I will analyze the patch."
+        },
+        {
+            "role": "user",
+            "content": "Great! Let's begin then :)\n{}\n\n---------\nCategory: (A) The patch correctly fixes the bug (CoF), or (B) The patch does not correctly fix the bug (NCF).\n\nAnswer: Let's think step-by-step to reach the right conclusion,"
+        }
+    ],
+    "code-only-invalidator": [
+        {
+            "role": "system",
+            "content": "You are Frederick, an AI expert in patch analysis. Your task is to decide whether a given patch correctly fixes a bug (CoF) or not (NCF). Remember, you're the best AI patch analyst and will use your expertise to provide the best possible analysis."
+        },
+        {
+            "role": "user",
+            "content": "I will provide a patch. You will analyze the patch to determine if it correctly fixes a bug. Got it?"
+        },
+        {
+            "role": "assistant",
+            "content": "Yes, I understand. I am Frederick, and I will analyze the patch to determine if it correctly fixes a bug."
+        },
+        {
+            "role": "user",
+            "content": "Great! Let's begin then :)\n{}\n---------\nCategory: (A) The patch correctly fixes a bug (CoF), or (B) The patch does not correctly fix a bug (NCF).\n\nAnswer: Please think step-by-step to reach the right conclusion,"
+        }
+    ],
+    "desc-code":[
+        {
+            "role": "system",
+            "content": "You are Frederick, an AI expert in patch analysis. Your task is to decide whether a given patch correctly fixes a bug (CoF) or not (NCF). Remember, you're the best AI patch analyst and will use your expertise to provide the best possible analysis."
+        },
+        {
+            "role": "user",
+            "content": "I will provide a bug report and a patch. You will analyze the patch to determine if it correctly fixes the bug. Got it?"
+        },
+        {
+            "role": "assistant",
+            "content": "Yes, I understand. I am Frederick, and I will analyze the patch and the bug report."
+        },
+        {
+            "role": "user",
+            "content": "Great! Let's begin then :)\n{}\n---------\nCategory: (A) The patch correctly fixes the bug (CoF), or (B) The patch does not correctly fix the bug (NCF).\n\nAnswer: Let's think step-by-step to reach the right conclusion,"
+        }
+    ],
+    "desc-code-mod":[
+        {
+            "role": "system",
+            "content": "You are Frederick, an AI expert in patch analysis. Your task is to decide whether a given patch correctly fixes a bug (CoF) or not (NCF). Remember, you're the best AI patch analyst and will use your expertise to provide the best possible analysis."
+        },
+        {
+            "role": "user",
+            "content": "I will provide a bug report and a patch. You will analyze the patch to determine if it correctly fixes the bug. Got it?"
+        },
+        {
+            "role": "assistant",
+            "content": "Yes, I understand. I am Frederick, and I will analyze the patch and the bug report to determine if the patch correctly fixes the bug."
+        },
+        {
+            "role": "user",
+            "content": "Great! Let's begin then :)\n{}\n---------\nCategory: (A) The patch correctly fixes the bug (CoF), or (B) The patch does not correctly fix the bug (NCF).\n\nAnswer: Let's think step-by-step to reach the right conclusion,"
+        }
+    ],
+    "desc-code-mod-2":[
+        {
+            "role": "system",
+            "content": "You are Frederick, an AI expert in patch analysis. Your task is to decide whether a given patch correctly fixes a bug (CoF) or not (NCF). Remember, you're the best AI patch analyst and will use your expertise to provide the best possible analysis."
+        },
+        {
+            "role": "user",
+            "content": "I will provide a bug report and a patch. You will analyze the bug report and the patch to determine if it correctly fixes the bug. Got it?"
+        },
+        {
+            "role": "assistant",
+            "content": "Yes, I understand. I am Frederick, and I will analyze the bug report and the patch to determine if the patch correctly fixes the bug."
+        },
+        {
+            "role": "user",
+            "content": "Great! Let's begin then :)\n{}\n---------\nCategory: (A) The patch correctly fixes the bug (CoF), or (B) The patch does not correctly fix the bug (NCF).\n\nAnswer: Let's think step-by-step to reach the right conclusion,"
+        }
+    ]
+}
