@@ -1,0 +1,691 @@
+{
+  "task": "cvss",
+  "dataset": "AV",
+  "model": "deepseek-v4-flash:cloud",
+  "task_type": "CVSS",
+  "n_samples_per_class": 30,
+  "extraction_prompt": "You are a software security expert. I am building a vulnerability severity assessment system based on CVSS v3.1, specifically the AV metric.\n\nBelow are some examples of source code functions and their corresponding AV labels:\n\n[Not Related (Class 0)]:\n  - Function: shmem_partial_swap_usage\n    Description: mm shmem determine in byte how many of the shmem object is page mapped by the given offset are swapp...\n  - Function: vma_hugecache_offset\n    Description: mm hugetlb convert the address within this vma to the page offset within the mapping in pagecache pa...\n  - Function: reap_alien\n    Description: mm slab called from cache reap to regularly drain alien cache round robin...\n  - Function: do_shm_rmid\n    Description: called with shm id rwsem writer and the shp structure locked only shm id rwsem remains locked on exi...\n  - Function: shuffle_valid_page\n    Description: mm shuffle for two page to be swapped in the shuffle they must be free on free area lru have the sam...\n  - Function: zswap_entry_find_get\n    Description: mm zswap caller must hold the tree lock...\n  - Function: get_fullness_group\n    Description: mm zsmalloc for each size class zspages are divided into different group depending on how full they ...\n  - Function: bdi_remove_from_list\n    Description: mm backing dev remove bdi from bdi list and ensure that it is no longer visible...\n  - Function: slob_last\n    Description: mm slob return true if is the last free block in it page...\n  - Function: do_mremap\n    Description: expand or shrink an existing mapping potentially moving it at the same time controlled by the mremap...\n  - Function: color_white\n    Description: mm kmemleak object color encoded with count and min count white orphan object not enough reference t...\n  - Function: copy_present_page\n    Description: mm memory copy present and normal page if necessary note the usual case is that this doe not need to...\n  - Function: zswap_frontswap_load\n    Description: mm zswap return if the page wa successfully decompressed return on entry not found or error...\n  - Function: pgd_clear_bad\n    Description: mm pgtable generic if bad entry is found while walking page table report the error before resetting ...\n  - Function: node_match\n    Description: mm slub check if the object in per cpu structure fit numa locality expectation...\n  - Function: numa_default_policy\n    Description: include linux mempolicy reset policy of current process to default...\n  - Function: __get_any_page\n    Description: mm memory failure safely get reference count of an arbitrary page return for free page eio for zero ...\n  - Function: check_pad_bytes\n    Description: mm slub object layout object address byte of the object to be managed if the freepointer may overlay...\n  - Function: adjust_zone_range_for_zone_movable\n    Description: mm page alloc the zone range provided by the architecture do not include zone movable because it is ...\n  - Function: hugetlbfs_pagecache_page\n    Description: mm hugetlb return the pagecache page at given address within vma...\n  - Function: __mod_zone_page_state\n    Description: include linux vmstat for use when we know that interrupt are disabled or when we know that preemptio...\n  - Function: scan_large_block\n    Description: mm kmemleak scan large memory block in max scan size chunk to reduce the latency...\n  - Function: balance_dirty_pages\n    Description: mm page writeback balance dirty page must be called by process which are generating dirty data it lo...\n  - Function: ____cache_alloc_node\n    Description: mm slab interface to enable slab creation on nodeid...\n  - Function: page_swapcount\n    Description: include linux swap how many reference to page are currently swapped out this doe not give an exact a...\n  - Function: mminit_verify_zonelist\n    Description: mm internal the zonelists are simply reported validation is manual...\n  - Function: __set_page_dirty_nobuffers\n    Description: mm page writeback for address space which do not use buffer just tag the page a dirty in the xarray ...\n  - Function: create_unique_id\n    Description: mm slub create unique string id for slab cache format flag size...\n  - Function: ptep_set_access_flags\n    Description: arch riscv include asm pgtable only set the access flag dirty accessed a well a write permission fur...\n  - Function: memory_is_poisoned_1\n    Description: mm kasan generic all function below always inlined so compiler could perform better optimization in ...\n\n[Network (Class 1)]:\n  - Function: tcp_read_sock\n    Description: net ipv4 tcp read isendfile style from tcp socket...\n  - Function: skb_copy_bits\n    Description: net core skbuff copy bit from skb to kernel buffer const struct sk buff skb source skb int offset of...\n  - Function: packet_do_bind\n    Description: net packet af packet attach packet hook...\n  - Function: atalk_rcv\n    Description: net appletalk ddp receive packet in skb from device dev skb packet received dev network device where...\n  - Function: skb_is_swtx_tstamp\n    Description: on transmit software and hardware timestamps are returned independently a the two skb clone share th...\n  - Function: atl1e_free_ring_resources\n    Description: driver net ethernet atheros atl1e atl1e main free tx rx descriptor resource free all transmit softwa...\n  - Function: alloc_netdev_mqs\n    Description: allocate network device allocates struct net device with private data area for driver use and perfor...\n  - Function: ip_rcv\n    Description: net ipv4 ip input ip receive entry point...\n  - Function: e1000_receive_skb\n    Description: driver net ethernet intel e1000e netdev helper function to handle rx indication struct e1000 adapter...\n  - Function: tcp_rate_skb_delivered\n    Description: net ipv4 tcp rate from tcp rate...\n  - Function: e1000_clean_tx_irq\n    Description: driver net ethernet intel e1000e netdev reclaim resource after transmit completes struct e1000 adapt...\n  - Function: igc_phy_has_link\n    Description: driver net ethernet intel igc igc phy poll phy for link poll the phy status register for link iterat...\n  - Function: rmnet_deliver_skb\n    Description: driver net ethernet qualcomm rmnet rmnet handler generic handler...\n  - Function: __sys_accept4\n    Description: for accept we attempt to create new socket set up the link with the client wake up the client then r...\n  - Function: ncsi_rsp_handler_oem_bcm\n    Description: net ncsi ncsi rsp response handler for broadcom card...\n\n[Adjacent Network (Class 2)]:\n  - Function: nfc_targets_found\n    Description: net nfc core inform that target were found the device driver must call this function when one or man...\n  - Function: nfc_deactivate_target\n    Description: net nfc core deactivate nfc target struct nfc dev dev the nfc device that found the target u32 targe...\n  - Function: rtw_calculate_wlan_pkt_size_by_attribue23a\n    Description: calculate wlan packet max size from pkt attrib this function doe not consider fragment case...\n  - Function: nfc_register_device\n    Description: net nfc core register nfc device in the nfc subsystem struct nfc dev dev the nfc device to register...\n  - Function: init_hw_mlme_ext23a\n    Description: following are the initialization function for wifi mlme...\n  - Function: iwctl_siwfreq\n    Description: wireless handler set frequency or channel...\n  - Function: ieee80211_rx_cooked_monitor\n    Description: net mac80211 rx todo use ieee80211 rx fragmented...\n  - Function: amp_ctrl_get\n    Description: net bluetooth amp remote amp controller interface...\n  - Function: cfg80211_ready_on_channel\n    Description: net wireless nl80211 notification of remain on channel start struct wireless dev wdev wireless devic...\n\n[Physical (Class 3)]:\n  - Function: unbind_marked_interfaces\n    Description: driver usb core driver unbind driver for udev is marked interface these interface have the need bind...\n  - Function: lpfc_issue_init_vpi\n    Description: driver scsi lpfc lpfc hbadisc issue init vpi mailbox command this function issue init vpi mailbox co...\n  - Function: rpm_suspend\n    Description: driver base power runtime carry out runtime suspend of given device check if the device is runtime p...\n  - Function: device_driver_detach\n    Description: driver base dd detach driver from specific device detach driver from device will acquire both dev lo...\n  - Function: usb_audio_disconnect\n    Description: sound usb card we need to take care of counter since disconnection can be called also many time a we...\n  - Function: rp_flush_buffer\n    Description: driver tty rocket flush the tx fifo for port deletes data in the xmit buf stored in the port struct ...\n  - Function: bfa_fcs_lport_ms_init\n    Description: driver scsi bfa bfa fcs lport m fcs routine...\n  - Function: device_to_dev_kobj\n    Description: driver base core select sys dev directory for the device by default we select char for new entry set...\n  - Function: wakeup_source_remove\n    Description: include linux pm wakeup remove given object from the wakeup source list struct wakeup source w wakeu...\n  - Function: usb_serial_deregister_drivers\n    Description: driver usb serial usb serial deregister driver for usb serial module deregisters all the driver in t...\n  - Function: serial_port_shutdown\n    Description: driver usb serial usb serial shut down hardware shut down usb serial port serialized against activat...\n\nYour task: Based on your knowledge and the examples above, briefly summarize the \"Identifying Characteristics\" (including function types, common keywords, and logic patterns) for each AV class.\n\n**IMPORTANT**:\n- Return the rule for EACH class, in the format:\n  **Class X (Label)**: [brief description, 2-3 sentences]\n- NO additional explanation needed, just return the rule summary.\n- Focus on distinctive keywords and patterns that help differentiate between classes.\n\nLet's begin:",
+  "extracted_heuristics": "**Class 0 (Not Related)**: Functions are primarily internal memory management (mm), page allocation, slab, swap, and kernel infrastructure operations. Keywords include \"mm\", \"shmem\", \"hugetlb\", \"slab\", \"page\", \"swap\", \"kmemleak\", and \"vmstat\". No network, wireless, or device driver references.\n\n**Class 1 (Network)**: Functions involve TCP/IP stack, socket operations, Ethernet device drivers, and network packet handling. Keywords include \"tcp\", \"skb\", \"ip\", \"net\", \"ethernet\", \"alloc_netdev\", and \"socket\". Typically operate over wide-area networks.\n\n**Class 2 (Adjacent Network)**: Functions handle short-range wireless protocols like NFC, Bluetooth, and Wi-Fi (802.11). Keywords include \"nfc\", \"bluetooth\", \"ieee80211\", \"cfg80211\", \"wireless\", and \"amp_ctrl\". Logic involves target discovery and channel management.\n\n**Class 3 (Physical)**: Functions are low-level device drivers for USB, SCSI, serial, and power management hardware. Keywords include \"driver usb\", \"driver scsi\", \"usb_serial\", \"driver base\", \"rpm_suspend\", and \"lpfc\". Direct physical hardware interaction.",
+  "class_samples": {
+    "1": [
+      {
+        "id": "tcp_read_sock",
+        "function": "tcp_read_sock",
+        "description": "net ipv4 tcp read isendfile style from tcp socket",
+        "ground_truth": "1"
+      },
+      {
+        "id": "skb_copy_bits",
+        "function": "skb_copy_bits",
+        "description": "net core skbuff copy bit from skb to kernel buffer const struct sk buff skb source skb int offset offset in source void to destination buffer int len number of byte to copy copy the specified number of byte from the source skb to the destination buffer caution if it prototype is ever changed check arch net file since it is called from bpf assembly code",
+        "ground_truth": "1"
+      },
+      {
+        "id": "packet_do_bind",
+        "function": "packet_do_bind",
+        "description": "net packet af packet attach packet hook",
+        "ground_truth": "1"
+      },
+      {
+        "id": "atalk_rcv",
+        "function": "atalk_rcv",
+        "description": "net appletalk ddp receive packet in skb from device dev skb packet received dev network device where the packet come from pt packet type receive packet in skb from device dev this ha come from the snap decoder and on entry skb transport header is the ddp header skb len is the ddp header skb len is the ddp length the physical header have been extracted ppp should probably pas frame marked a for this layer ie arphrd ethertalk struct sk buff skb undescribed struct net device dev undescribed struct packet type pt undescribed struct net device orig dev undescribed",
+        "ground_truth": "1"
+      },
+      {
+        "id": "skb_is_swtx_tstamp",
+        "function": "skb_is_swtx_tstamp",
+        "description": "on transmit software and hardware timestamps are returned independently a the two skb clone share the hardware timestamp which may be updated before the software timestamp is received hardware tx timestamp may be returned only if there is no software tx timestamp ignore false software timestamps which may be made in the sock recv timestamp call when the option so timestamp old n is enabled on the socket even when the skb ha hardware timestamp",
+        "ground_truth": "1"
+      },
+      {
+        "id": "atl1e_free_ring_resources",
+        "function": "atl1e_free_ring_resources",
+        "description": "driver net ethernet atheros atl1e atl1e main free tx rx descriptor resource free all transmit software resource struct atl1e adapter adapter board private structure",
+        "ground_truth": "1"
+      },
+      {
+        "id": "alloc_netdev_mqs",
+        "function": "alloc_netdev_mqs",
+        "description": "allocate network device allocates struct net device with private data area for driver use and performs basic initialization also allocates subqueue structs for each queue on the device int sizeof priv size of private data to allocate space for const char name device name format string unsigned char name assign type origin of device name void setup struct net device callback to initialize device unsigned int txqs the number of tx subqueues to allocate unsigned int rxqs the number of rx subqueues to allocate",
+        "ground_truth": "1"
+      },
+      {
+        "id": "ip_rcv",
+        "function": "ip_rcv",
+        "description": "net ipv4 ip input ip receive entry point",
+        "ground_truth": "1"
+      },
+      {
+        "id": "e1000_receive_skb",
+        "function": "e1000_receive_skb",
+        "description": "driver net ethernet intel e1000e netdev helper function to handle rx indication struct e1000 adapter adapter board private structure u8 status descriptor status field a written by hardware le16 vlan descriptor vlan field a written by hardware no le be conversion struct sk buff skb pointer to sk buff to be indicated to stack",
+        "ground_truth": "1"
+      },
+      {
+        "id": "tcp_rate_skb_delivered",
+        "function": "tcp_rate_skb_delivered",
+        "description": "net ipv4 tcp rate from tcp rate",
+        "ground_truth": "1"
+      },
+      {
+        "id": "e1000_clean_tx_irq",
+        "function": "e1000_clean_tx_irq",
+        "description": "driver net ethernet intel e1000e netdev reclaim resource after transmit completes struct e1000 adapter adapter board private structure struct e1000 tx ring tx ring ring to clean",
+        "ground_truth": "1"
+      },
+      {
+        "id": "igc_phy_has_link",
+        "function": "igc_phy_has_link",
+        "description": "driver net ethernet intel igc igc phy poll phy for link poll the phy status register for link iteration number of time struct igc hw hw pointer to the hw structure u32 iteration number of time to poll for link u32 usec interval delay between polling attempt bool success pointer to whether polling wa successful or not",
+        "ground_truth": "1"
+      },
+      {
+        "id": "rmnet_deliver_skb",
+        "function": "rmnet_deliver_skb",
+        "description": "driver net ethernet qualcomm rmnet rmnet handler generic handler",
+        "ground_truth": "1"
+      },
+      {
+        "id": "__sys_accept4",
+        "function": "__sys_accept4",
+        "description": "for accept we attempt to create new socket set up the link with the client wake up the client then return the new connected fd we collect the address of the connector in kernel space and move it to user at the very end this is unclean because we open the socket then return an error 1g add the ability to recvmsg to query connection pending status to recvmsg we need to add that support in way thats clean when we restructure accept also",
+        "ground_truth": "1"
+      },
+      {
+        "id": "ncsi_rsp_handler_oem_bcm",
+        "function": "ncsi_rsp_handler_oem_bcm",
+        "description": "net ncsi ncsi rsp response handler for broadcom card",
+        "ground_truth": "1"
+      }
+    ],
+    "0": [
+      {
+        "id": "shmem_partial_swap_usage",
+        "function": "shmem_partial_swap_usage",
+        "description": "mm shmem determine in byte how many of the shmem object is page mapped by the given offset are swapped out this is safe to call without mutex or the page lock thanks to rcu a long a the inode doe not go away and racy result are not problem",
+        "ground_truth": "0"
+      },
+      {
+        "id": "vma_hugecache_offset",
+        "function": "vma_hugecache_offset",
+        "description": "mm hugetlb convert the address within this vma to the page offset within the mapping in pagecache page unit huge page here",
+        "ground_truth": "0"
+      },
+      {
+        "id": "reap_alien",
+        "function": "reap_alien",
+        "description": "mm slab called from cache reap to regularly drain alien cache round robin",
+        "ground_truth": "0"
+      },
+      {
+        "id": "do_shm_rmid",
+        "function": "do_shm_rmid",
+        "description": "called with shm id rwsem writer and the shp structure locked only shm id rwsem remains locked on exit",
+        "ground_truth": "0"
+      },
+      {
+        "id": "shuffle_valid_page",
+        "function": "shuffle_valid_page",
+        "description": "mm shuffle for two page to be swapped in the shuffle they must be free on free area lru have the same order and have the same migratetype",
+        "ground_truth": "0"
+      },
+      {
+        "id": "zswap_entry_find_get",
+        "function": "zswap_entry_find_get",
+        "description": "mm zswap caller must hold the tree lock",
+        "ground_truth": "0"
+      },
+      {
+        "id": "get_fullness_group",
+        "function": "get_fullness_group",
+        "description": "mm zsmalloc for each size class zspages are divided into different group depending on how full they are this wa done so that we could easily find empty or nearly empty zspages when we try to shrink the pool not yet implemented this function return fullness status of the given page",
+        "ground_truth": "0"
+      },
+      {
+        "id": "bdi_remove_from_list",
+        "function": "bdi_remove_from_list",
+        "description": "mm backing dev remove bdi from bdi list and ensure that it is no longer visible",
+        "ground_truth": "0"
+      },
+      {
+        "id": "slob_last",
+        "function": "slob_last",
+        "description": "mm slob return true if is the last free block in it page",
+        "ground_truth": "0"
+      },
+      {
+        "id": "do_mremap",
+        "function": "do_mremap",
+        "description": "expand or shrink an existing mapping potentially moving it at the same time controlled by the mremap maymove flag and available vm space under nommu condition we only permit changing mapping is size and only a long a it stay within the region allocated by do mmap private and the block is not shareable mremap fixed is not supported under nommu condition",
+        "ground_truth": "0"
+      },
+      {
+        "id": "color_white",
+        "function": "color_white",
+        "description": "mm kmemleak object color encoded with count and min count white orphan object not enough reference to it count min count gray not orphan not marked a false positive min count or sufficient reference to it count min count black ignore it doe not contain reference text section min count no function defined for this color newly created object do not have any color assigned object count before the next memory scan when they become white",
+        "ground_truth": "0"
+      },
+      {
+        "id": "copy_present_page",
+        "function": "copy_present_page",
+        "description": "mm memory copy present and normal page if necessary note the usual case is that this doe not need to do anything and can just return positive value that will let the caller know that it can just increase the page refcount and re use the pte the traditional way but if we need to copy it because it need to be pinned in the parent and the child should get it own copy rather than just reference to the same page we will do that here and return zero to let the caller know we are done and if we need pre allocated page but do not yet have one return negative error to let the preallocation code know so that it can do so outside the page table lock",
+        "ground_truth": "0"
+      },
+      {
+        "id": "zswap_frontswap_load",
+        "function": "zswap_frontswap_load",
+        "description": "mm zswap return if the page wa successfully decompressed return on entry not found or error",
+        "ground_truth": "0"
+      },
+      {
+        "id": "pgd_clear_bad",
+        "function": "pgd_clear_bad",
+        "description": "mm pgtable generic if bad entry is found while walking page table report the error before resetting entry to none usually but very seldom called out from the none or clear bad macro",
+        "ground_truth": "0"
+      },
+      {
+        "id": "node_match",
+        "function": "node_match",
+        "description": "mm slub check if the object in per cpu structure fit numa locality expectation",
+        "ground_truth": "0"
+      },
+      {
+        "id": "numa_default_policy",
+        "function": "numa_default_policy",
+        "description": "include linux mempolicy reset policy of current process to default",
+        "ground_truth": "0"
+      },
+      {
+        "id": "__get_any_page",
+        "function": "__get_any_page",
+        "description": "mm memory failure safely get reference count of an arbitrary page return for free page eio for zero refcount page that is not free and for any other page type for the page is returned with increased page count otherwise not",
+        "ground_truth": "0"
+      },
+      {
+        "id": "check_pad_bytes",
+        "function": "check_pad_bytes",
+        "description": "mm slub object layout object address byte of the object to be managed if the freepointer may overlay the object then the free pointer is at the middle of the object poisoning us poison free and the last byte is poison end object object size padding to reach word boundary this is also used for redzoning padding is extended by another word if redzoning is enabled and object size inuse we fill with red inactive for inactive object and with red active for object in use object inuse meta data start here free pointer if we cannot overwrite object on free tracking data for slab store user padding to reach required alignment boundary or at mininum one word if debugging is on to be able to detect writes before the word boundary padding is done using poison inuse object size nothing is used beyond size if slabcaches are merged then the object size and inuse boundary are mostly ignored and therefore no slab option that rely on these boundary may be used with merged slabcaches",
+        "ground_truth": "0"
+      },
+      {
+        "id": "adjust_zone_range_for_zone_movable",
+        "function": "adjust_zone_range_for_zone_movable",
+        "description": "mm page alloc the zone range provided by the architecture do not include zone movable because it is sized independent of architecture unlike the other zone the starting point for zone movable is not fixed it may be different in each node depending on the size of each node and how evenly kernelcore is distributed this helper function adjusts the zone range provided by the architecture for given node by using the end of the highest usable zone for zone movable this preserve the assumption that zone within node are in order of monotonic increase memory address",
+        "ground_truth": "0"
+      },
+      {
+        "id": "hugetlbfs_pagecache_page",
+        "function": "hugetlbfs_pagecache_page",
+        "description": "mm hugetlb return the pagecache page at given address within vma",
+        "ground_truth": "0"
+      },
+      {
+        "id": "__mod_zone_page_state",
+        "function": "__mod_zone_page_state",
+        "description": "include linux vmstat for use when we know that interrupt are disabled or when we know that preemption is disabled and that particular counter cannot be updated from interrupt context",
+        "ground_truth": "0"
+      },
+      {
+        "id": "scan_large_block",
+        "function": "scan_large_block",
+        "description": "mm kmemleak scan large memory block in max scan size chunk to reduce the latency",
+        "ground_truth": "0"
+      },
+      {
+        "id": "balance_dirty_pages",
+        "function": "balance_dirty_pages",
+        "description": "mm page writeback balance dirty page must be called by process which are generating dirty data it look at the number of dirty page in the machine and will force the caller to wait once crossing the background thresh dirty thresh if we are over background thresh then the writeback thread are woken to perform some writeout",
+        "ground_truth": "0"
+      },
+      {
+        "id": "____cache_alloc_node",
+        "function": "____cache_alloc_node",
+        "description": "mm slab interface to enable slab creation on nodeid",
+        "ground_truth": "0"
+      },
+      {
+        "id": "page_swapcount",
+        "function": "page_swapcount",
+        "description": "include linux swap how many reference to page are currently swapped out this doe not give an exact answer when swap count is continued but doe include the high count continued flag to allow for that",
+        "ground_truth": "0"
+      },
+      {
+        "id": "mminit_verify_zonelist",
+        "function": "mminit_verify_zonelist",
+        "description": "mm internal the zonelists are simply reported validation is manual",
+        "ground_truth": "0"
+      },
+      {
+        "id": "__set_page_dirty_nobuffers",
+        "function": "__set_page_dirty_nobuffers",
+        "description": "mm page writeback for address space which do not use buffer just tag the page a dirty in the xarray this is also used when single buffer is being dirtied we want to set the page dirty in that case but not all the buffer this is bottom up dirtying whereas set page dirty buffer is top down dirtying the caller must ensure this doe not race with truncation most will simply hold the page lock but zap pte range call with the page mapped and the pte lock held which also lock out truncation",
+        "ground_truth": "0"
+      },
+      {
+        "id": "create_unique_id",
+        "function": "create_unique_id",
+        "description": "mm slub create unique string id for slab cache format flag size",
+        "ground_truth": "0"
+      },
+      {
+        "id": "ptep_set_access_flags",
+        "function": "ptep_set_access_flags",
+        "description": "arch riscv include asm pgtable only set the access flag dirty accessed a well a write permission furthermore we know it always get set to more permissive setting which allows most architecture to optimize this we return whether the pte actually changed which in turn instructs the caller to do thing like update mmu cache this used to be done in the caller but sparc need minor fault to force that call on sun4c so we changed this macro slightly",
+        "ground_truth": "0"
+      },
+      {
+        "id": "memory_is_poisoned_1",
+        "function": "memory_is_poisoned_1",
+        "description": "mm kasan generic all function below always inlined so compiler could perform better optimization in each of asan loadx assn storex depending on memory access size",
+        "ground_truth": "0"
+      },
+      {
+        "id": "set_send_length",
+        "function": "set_send_length",
+        "description": "driver infiniband hw hfi1 chip set send length set the mtu by limiting how many dws may be sent the sendlencheck register compare against lrh pktlen so use the max byte included in the lrh this routine change all vl value except vl15 which it maintains at the same value ppd per port data",
+        "ground_truth": "0"
+      },
+      {
+        "id": "slob_alloc",
+        "function": "slob_alloc",
+        "description": "mm slob slob alloc entry point into the slob allocator",
+        "ground_truth": "0"
+      },
+      {
+        "id": "hugepagesz_setup",
+        "function": "hugepagesz_setup",
+        "description": "mm hugetlb hugepagesz command line processing specific huge page size can only be specified once with hugepagesz hugepagesz is followed by hugepages on the command line the global variable parsed valid hugepagesz is used to determine if prior hugepagesz argument wa valid",
+        "ground_truth": "0"
+      },
+      {
+        "id": "pagetypeinfo_show",
+        "function": "pagetypeinfo_show",
+        "description": "mm vmstat this print out statistic in relation to grouping page by mobility it is expensive to collect so do not constantly read the file",
+        "ground_truth": "0"
+      },
+      {
+        "id": "mempool_alloc_pages",
+        "function": "mempool_alloc_pages",
+        "description": "mm mempool simple mempool backed page allocator that allocates page of the order specified by pool data",
+        "ground_truth": "0"
+      },
+      {
+        "id": "sockaddr_to_str",
+        "function": "sockaddr_to_str",
+        "description": "driver infiniband ulp rtrs rtrs convert sockaddr to string the return value is the number of character written into buf not including the trailing if len is the function return const struct sockaddr addr the sockadddr structure to be converted char buf string containing socket addr size len string length",
+        "ground_truth": "0"
+      },
+      {
+        "id": "check_new_page",
+        "function": "check_new_page",
+        "description": "mm page alloc this page is about to be returned from the page allocator",
+        "ground_truth": "0"
+      },
+      {
+        "id": "memcg_check_events",
+        "function": "memcg_check_events",
+        "description": "mm memcontrol check event in order",
+        "ground_truth": "0"
+      },
+      {
+        "id": "___slab_alloc",
+        "function": "___slab_alloc",
+        "description": "mm slub slow path the lockless freelist is empty or we need to perform debugging duty processing is still very fast if new object have been freed to the regular freelist in that case we simply take over the regular freelist a the lockless freelist and zap the regular freelist if that is not working then we fall back to the partial list we take the first element of the freelist a the object to allocate now and move the rest of the freelist to the lockless freelist and if we were unable to get new slab from the partial slab list then we need to allocate new slab this is the slowest path since it involves call to the page allocator and the setup of new slab version of slab alloc to use when we know that interrupt are already disabled which is the case for bulk allocation",
+        "ground_truth": "0"
+      },
+      {
+        "id": "stable_tree_append",
+        "function": "stable_tree_append",
+        "description": "mm ksm stable tree append add another rmap item to the linked list of rmap item hanging off given node of the stable tree all sharing the same ksm page",
+        "ground_truth": "0"
+      },
+      {
+        "id": "cpu_vm_stats_fold",
+        "function": "cpu_vm_stats_fold",
+        "description": "include linux vmstat fold the data for an offline cpu into the global array there cannot be any access by the offline cpu and therefore synchronization is simplified",
+        "ground_truth": "0"
+      },
+      {
+        "id": "shmctl_down",
+        "function": "shmctl_down",
+        "description": "this function handle some shmctl command which require the rwsem to be held in write mode note no lock must be held the rwsem is taken inside this function",
+        "ground_truth": "0"
+      },
+      {
+        "id": "me_unknown",
+        "function": "me_unknown",
+        "description": "mm memory failure page in unknown state do nothing",
+        "ground_truth": "0"
+      },
+      {
+        "id": "get_object",
+        "function": "get_object",
+        "description": "mm kmemleak increment the object use count return if successful or otherwise note that once an object is use count reached the rcu freeing wa already registered and the object should no longer be used this function must be called under the protection of rcu read lock",
+        "ground_truth": "0"
+      },
+      {
+        "id": "__test_page_isolated_in_pageblock",
+        "function": "__test_page_isolated_in_pageblock",
+        "description": "mm page isolation test all page in the range is free mean isolated or not all page in start pfn end pfn must be in the same zone zone lock must be held before call this return the last tested pfn",
+        "ground_truth": "0"
+      },
+      {
+        "id": "mem_cgroup_oom_trylock",
+        "function": "mem_cgroup_oom_trylock",
+        "description": "mm memcontrol check oom killer is already running under our hierarchy if someone is running return false",
+        "ground_truth": "0"
+      },
+      {
+        "id": "cvmx_pip_config_vlan_qos",
+        "function": "cvmx_pip_config_vlan_qos",
+        "description": "arch mips include asm octeon cvmx pip uint64 vlan priority vlan priority uint64 qos qos queue for packet matching this watcher",
+        "ground_truth": "0"
+      },
+      {
+        "id": "check_kernel_text_object",
+        "function": "check_kernel_text_object",
+        "description": "mm usercopy is this address range in the kernel text area",
+        "ground_truth": "0"
+      },
+      {
+        "id": "expand_stack",
+        "function": "expand_stack",
+        "description": "expand stack to given address not supported under nommu condition",
+        "ground_truth": "0"
+      },
+      {
+        "id": "slab_alloc_node",
+        "function": "slab_alloc_node",
+        "description": "mm slub inlined fastpath so that allocation function kmalloc kmem cache alloc have the fastpath folded into their function so no function call overhead for request that can be satisfied on the fastpath the fastpath work by first checking if the lockless freelist can be used if not then slab alloc is called for slow processing otherwise we can simply pick the next object from the lockless free list",
+        "ground_truth": "0"
+      },
+      {
+        "id": "mlock_vma_page",
+        "function": "mlock_vma_page",
+        "description": "mm internal must be called with vma is mmap lock held for read or write and page locked",
+        "ground_truth": "0"
+      },
+      {
+        "id": "get_user_pages_unlocked",
+        "function": "get_user_pages_unlocked",
+        "description": "mm gup get user page unlocked is suitable to replace the form mmap read lock mm get user page mm page null mmap read unlock mm with get user page unlocked mm page it is functionally equivalent to get user page fast so get user page fast should be used instead if specific gup flag foll force are not required",
+        "ground_truth": "0"
+      },
+      {
+        "id": "__page_reporting_request",
+        "function": "__page_reporting_request",
+        "description": "mm page reporting request page reporting",
+        "ground_truth": "0"
+      },
+      {
+        "id": "set_pageblock_order",
+        "function": "set_pageblock_order",
+        "description": "mm page alloc initialise the number of page represented by nr pageblock bit",
+        "ground_truth": "0"
+      },
+      {
+        "id": "clear_page_dirty_for_io",
+        "function": "clear_page_dirty_for_io",
+        "description": "mm page writeback clear page is dirty flag while caring for dirty memory accounting return true if the page wa previously dirty this is for preparing to put the page under writeout we leave the page tagged a dirty in the xarray so that concurrent write for sync can discover it via pagecache tag dirty walk the writepage implementation will run either set page writeback or set page dirty at which stage we bring the page is dirty flag and xarray dirty tag back into sync this incoherency between the page is dirty flag and xarray tag is unfortunate but it only exists while the page is locked",
+        "ground_truth": "0"
+      },
+      {
+        "id": "__audit_log_capset",
+        "function": "__audit_log_capset",
+        "description": "kernel auditsc store information about the argument to the capset syscall record the argument userspace sent to sys capset for later printing by the audit system if applicable const struct cred new the new credential const struct cred old the old current credential",
+        "ground_truth": "0"
+      },
+      {
+        "id": "free_page_and_swap_cache",
+        "function": "free_page_and_swap_cache",
+        "description": "mm swap state perform free page also freeing any swap cache associated with this page if it is the last user of the page",
+        "ground_truth": "0"
+      },
+      {
+        "id": "kmemleak_scan_thread",
+        "function": "kmemleak_scan_thread",
+        "description": "mm kmemleak thread function performing automatic memory scanning unreferenced object at the end of memory scan are reported but only the first time",
+        "ground_truth": "0"
+      },
+      {
+        "id": "page_trans_huge_mapcount",
+        "function": "page_trans_huge_mapcount",
+        "description": "include linux mm this calculates accurately how many mapping transparent hugepage ha unlike page mapcount which is not fully accurate this full accuracy is primarily needed to know if copy on write fault can reuse the page and change the mapping to read write instead of copying them at the same time this return the total mapcount too the function return the highest mapcount any one of the subpages ha if the return value is one even if different process are mapping different subpages of the transparent hugepage they can all reuse it because each process is reusing different subpage the total mapcount is instead counting all virtual mapping of the subpages if the total mapcount is equal to one it tell the caller all mapping belong to the same mm and in turn the anon vma of the transparent hugepage can become the vma anon vma local one a no other process may be mapping any of the subpages it would be more accurate to replace page mapcount with page trans huge mapcount however we only use page trans huge mapcount in the copy on write fault where we need full accuracy to avoid breaking page pinning because page trans huge mapcount is slower than page mapcount",
+        "ground_truth": "0"
+      },
+      {
+        "id": "addr_to_vb_idx",
+        "function": "addr_to_vb_idx",
+        "description": "mm vmalloc we should probably have fallback mechanism to allocate virtual memory out of partially filled vmap block however vmap block sizing should be fairly reasonable according to the vmalloc size so it should not be big problem",
+        "ground_truth": "0"
+      },
+      {
+        "id": "setup_per_cpu_pageset",
+        "function": "setup_per_cpu_pageset",
+        "description": "mm page alloc allocate per cpu pagesets and initialize them before this call only boot pagesets were available",
+        "ground_truth": "0"
+      },
+      {
+        "id": "hugepage_subpool_put_pages",
+        "function": "hugepage_subpool_put_pages",
+        "description": "mm hugetlb subpool accounting for freeing and unreserving page return the number of global page reservation that must be dropped the return value may only be different than the passed value delta in the case where subpool minimum size must be maintained",
+        "ground_truth": "0"
+      },
+      {
+        "id": "__split_vma",
+        "function": "__split_vma",
+        "description": "split vma bypass sysctl max map count checking we use this where it ha already been checked or doe not make sense to fail",
+        "ground_truth": "0"
+      },
+      {
+        "id": "cma_bitmap_aligned_offset",
+        "function": "cma_bitmap_aligned_offset",
+        "description": "mm cma find the offset of the base pfn from the specified align order the value returned is represented in order per bit",
+        "ground_truth": "0"
+      },
+      {
+        "id": "intel_pt_ff_cb",
+        "function": "intel_pt_ff_cb",
+        "description": "tool perf util intel pt decoder intel pt decoder fast forward lookahead callback determine if buffer trace is past the fast forward timestamp struct intel pt buffer buffer intel pt trace buffer void data opaque pointer to fast forward data struct fast forward data stop lookahead if buffer trace is past the fast forward timestamp and otherwise",
+        "ground_truth": "0"
+      },
+      {
+        "id": "kmemleak_disable",
+        "function": "kmemleak_disable",
+        "description": "mm kmemleak disable kmemleak no memory allocation freeing will be traced once this function is called disabling kmemleak is an irreversible operation",
+        "ground_truth": "0"
+      },
+      {
+        "id": "kasan_poison_shadow",
+        "function": "kasan_poison_shadow",
+        "description": "mm kasan common poison the shadow memory for isize byte starting from addr memory address should be aligned to kasan shadow scale size",
+        "ground_truth": "0"
+      },
+      {
+        "id": "hugetlb_cow",
+        "function": "hugetlb_cow",
+        "description": "mm hugetlb hugetlb cow should be called with page lock of the original hugepage held called with hugetlb instantiation mutex held and pte page locked so we cannot race with other handler or page migration keep the pte same check anyway to make transition from the mutex easier",
+        "ground_truth": "0"
+      },
+      {
+        "id": "writeback_set_ratelimit",
+        "function": "writeback_set_ratelimit",
+        "description": "mm page writeback if ratelimit page is too high then we can get into dirty data overload if large number of process all perform writes at the same time if it is too low then smp machine will call the expensive get writeback state too often here we set ratelimit page to level which ensures that when all cpu are dirtying in parallel we cannot go more than over the dirty memory threshold",
+        "ground_truth": "0"
+      },
+      {
+        "id": "count_mm_mlocked_page_nr",
+        "function": "count_mm_mlocked_page_nr",
+        "description": "go through vma area and sum size of mlocked vma page a return value note deferred memory locking case mlock2 mlock onfault is also counted return value previously mlocked page count",
+        "ground_truth": "0"
+      },
+      {
+        "id": "migrate_page_add",
+        "function": "migrate_page_add",
+        "description": "page migration thp tail page can be passed",
+        "ground_truth": "0"
+      },
+      {
+        "id": "shmem_initxattrs",
+        "function": "shmem_initxattrs",
+        "description": "mm shmem callback for security inode init security for acquiring xattrs",
+        "ground_truth": "0"
+      },
+      {
+        "id": "shmem_mknod",
+        "function": "shmem_mknod",
+        "description": "mm shmem file creation allocate an inode and we are done",
+        "ground_truth": "0"
+      },
+      {
+        "id": "try_to_unmap_flush_dirty",
+        "function": "try_to_unmap_flush_dirty",
+        "description": "mm internal flush iff there are potentially writable tlb entry that can race with io",
+        "ground_truth": "0"
+      },
+      {
+        "id": "slabs_node",
+        "function": "slabs_node",
+        "description": "mm slub tracking of the number of slab for debugging purpose",
+        "ground_truth": "0"
+      },
+      {
+        "id": "redirty_page_for_writepage",
+        "function": "redirty_page_for_writepage",
+        "description": "mm page writeback when writepage implementation decides that it doe not want to write this page for some reason it should redirty the locked page via redirty page for writepage and it should then unlock the page and return",
+        "ground_truth": "0"
+      }
+    ],
+    "3": [
+      {
+        "id": "unbind_marked_interfaces",
+        "function": "unbind_marked_interfaces",
+        "description": "driver usb core driver unbind driver for udev is marked interface these interface have the need binding flag set for example by usb resume interface the caller must hold udev is device lock",
+        "ground_truth": "3"
+      },
+      {
+        "id": "lpfc_issue_init_vpi",
+        "function": "lpfc_issue_init_vpi",
+        "description": "driver scsi lpfc lpfc hbadisc issue init vpi mailbox command this function issue init vpi mailbox command to initialize vpi for the vport struct lpfc vport vport pointer to lpfc vport data structure",
+        "ground_truth": "3"
+      },
+      {
+        "id": "rpm_suspend",
+        "function": "rpm_suspend",
+        "description": "driver base power runtime carry out runtime suspend of given device check if the device is runtime pm status allows it to be suspended cancel pending idle notification autosuspend or suspend if another suspend ha been started earlier either return immediately or wait for it to finish depending on the rpm nowait and rpm async flag if the rpm async flag is set then queue suspend request otherwise run the runtime suspend callback directly when runtime suspend succeeded if deferred resume wa requested while the callback wa running then carry it out otherwise send an idle notification for it parent if the suspend succeeded and both ignore child of parent power and irq safe of dev power are not set if runtime suspend failed with eagain or ebusy and if the rpm auto flag is set and the next autosuspend delay expiration time is in the future schedule another autosuspend attempt this function must be called under dev power lock with interrupt disabled struct device dev device to suspend int rpmflags flag bit",
+        "ground_truth": "3"
+      },
+      {
+        "id": "device_driver_detach",
+        "function": "device_driver_detach",
+        "description": "driver base dd detach driver from specific device detach driver from device will acquire both dev lock and dev parent lock if needed struct device dev device to detach driver from",
+        "ground_truth": "3"
+      },
+      {
+        "id": "usb_audio_disconnect",
+        "function": "usb_audio_disconnect",
+        "description": "sound usb card we need to take care of counter since disconnection can be called also many time a well a usb audio probe",
+        "ground_truth": "3"
+      },
+      {
+        "id": "rp_flush_buffer",
+        "function": "rp_flush_buffer",
+        "description": "driver tty rocket flush the tx fifo for port deletes data in the xmit buf stored in the port struct for the port note that spinlock are used to protect info member do not call this function if the spinlock is already held",
+        "ground_truth": "3"
+      },
+      {
+        "id": "bfa_fcs_lport_ms_init",
+        "function": "bfa_fcs_lport_ms_init",
+        "description": "driver scsi bfa bfa fcs lport m fcs routine",
+        "ground_truth": "3"
+      },
+      {
+        "id": "device_to_dev_kobj",
+        "function": "device_to_dev_kobj",
+        "description": "driver base core select sys dev directory for the device by default we select char for new entry setting class dev obj to null prevents an entry from being created class dev kobj must be set or cleared before any device are registered to the class otherwise device create sys dev entry and device remove sys dev entry will disagree about the presence of the link struct device dev device",
+        "ground_truth": "3"
+      },
+      {
+        "id": "wakeup_source_remove",
+        "function": "wakeup_source_remove",
+        "description": "include linux pm wakeup remove given object from the wakeup source list struct wakeup source w wakeup source object to remove from the list",
+        "ground_truth": "3"
+      },
+      {
+        "id": "usb_serial_deregister_drivers",
+        "function": "usb_serial_deregister_drivers",
+        "description": "driver usb serial usb serial deregister driver for usb serial module deregisters all the driver in the serial driver array and deregisters and free the struct usb driver that wa created by the call to usb serial register driver struct usb serial driver const serial driver null terminated array of pointer to driver to be deregistered",
+        "ground_truth": "3"
+      },
+      {
+        "id": "serial_port_shutdown",
+        "function": "serial_port_shutdown",
+        "description": "driver usb serial usb serial shut down hardware shut down usb serial port serialized against activate by the tport mutex and kept to matching open close pair of call by the initialized flag not called if tty is console struct tty port tport tty port to shut down",
+        "ground_truth": "3"
+      }
+    ],
+    "2": [
+      {
+        "id": "nfc_targets_found",
+        "function": "nfc_targets_found",
+        "description": "net nfc core inform that target were found the device driver must call this function when one or many nfc target are found after calling this function the device driver must stop polling for target note this function can be called with target null and target to notify driver error meaning that the polling operation cannot complete important this function must not be called from an atomic context in addition it must also not be called from context that would prevent the nfc core to call other nfc ops entry point concurrently struct nfc dev dev the nfc device that found the target struct nfc target target array of nfc target found int target target array size",
+        "ground_truth": "2"
+      },
+      {
+        "id": "nfc_deactivate_target",
+        "function": "nfc_deactivate_target",
+        "description": "net nfc core deactivate nfc target struct nfc dev dev the nfc device that found the target u32 target idx index of the target that must be deactivated u8 mode undescribed",
+        "ground_truth": "2"
+      },
+      {
+        "id": "rtw_calculate_wlan_pkt_size_by_attribue23a",
+        "function": "rtw_calculate_wlan_pkt_size_by_attribue23a",
+        "description": "calculate wlan packet max size from pkt attrib this function doe not consider fragment case",
+        "ground_truth": "2"
+      },
+      {
+        "id": "nfc_register_device",
+        "function": "nfc_register_device",
+        "description": "net nfc core register nfc device in the nfc subsystem struct nfc dev dev the nfc device to register",
+        "ground_truth": "2"
+      },
+      {
+        "id": "init_hw_mlme_ext23a",
+        "function": "init_hw_mlme_ext23a",
+        "description": "following are the initialization function for wifi mlme",
+        "ground_truth": "2"
+      },
+      {
+        "id": "iwctl_siwfreq",
+        "function": "iwctl_siwfreq",
+        "description": "wireless handler set frequency or channel",
+        "ground_truth": "2"
+      },
+      {
+        "id": "ieee80211_rx_cooked_monitor",
+        "function": "ieee80211_rx_cooked_monitor",
+        "description": "net mac80211 rx todo use ieee80211 rx fragmented",
+        "ground_truth": "2"
+      },
+      {
+        "id": "amp_ctrl_get",
+        "function": "amp_ctrl_get",
+        "description": "net bluetooth amp remote amp controller interface",
+        "ground_truth": "2"
+      },
+      {
+        "id": "cfg80211_ready_on_channel",
+        "function": "cfg80211_ready_on_channel",
+        "description": "net wireless nl80211 notification of remain on channel start struct wireless dev wdev wireless device u64 cookie the request cookie struct ieee80211 channel chan the current channel from remain on channel request unsigned int duration duration in millisecond that the driver intent to remain on the channel gfp gfp allocation flag",
+        "ground_truth": "2"
+      }
+    ]
+  },
+  "class_names": {
+    "0": "Not Related",
+    "1": "Network",
+    "2": "Adjacent Network",
+    "3": "Physical"
+  }
+}

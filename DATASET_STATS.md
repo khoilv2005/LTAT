@@ -90,3 +90,11 @@ Counted from all JSON dataset files under `data/`, excluding `*-prompt.json`.
 | Scope | Samples |
 |---|---:|
 | All datasets | 276,766 |
+
+Task	Input đưa vào ChatGPT	Output cần lấy	Prompt tốt theo paper
+1. Bug report summarization	bug report	title/summary	few-shot với gpt-4
+2. Security bug report identification	bug report	SBR/NBR	expertise với gpt-4
+3. Vulnerability severity evaluation	function + description	CVSS metric label AV/AC/PR/UI	self-heuristic với gpt-4
+4. Vulnerability repair	vulnerable code snippet + error/vuln info	repaired code	expertise với gpt-4
+5. Patch correctness assessment	patch/code/description tùy dataset	correct/incorrect patch	code-only hoặc self-heuristic, tùy dataset
+6. Stable patch classification	patch description + code snippet	stable/non-stable	expertise với gpt-4

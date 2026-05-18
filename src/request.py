@@ -24,13 +24,63 @@ import prompt
 logger = logging.getLogger(__name__)
 time_tag = time.strftime("%m%d%H%M", time.localtime())
 
+def build_chat_request_payload(model, messages, temperature=0, choices=1, max_token=8000, request_url=""):
+    """Build a provider-specific chat payload without changing result parsing."""
+    request_url_lower = (request_url or "").lower()
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "top_p": 1,
+        "stream": False,
+    }
+
+    if "ollama" in request_url_lower:
+        payload["think"] = False
+        payload["options"] = {"num_predict": min(max_token, 1024)}
+    else:
+        payload["max_tokens"] = max_token
+        if choices and choices > 1:
+            payload["n"] = choices
+
+    return payload
+
+def resolve_api_key(api_key, request_url=""):
+    if api_key:
+        return api_key
+
+    request_url_lower = (request_url or "").lower()
+    env_candidates = []
+    if "openai" in request_url_lower:
+        env_candidates.append("OPENAI_API_KEY")
+    elif "minimax" in request_url_lower:
+        env_candidates.append("MINIMAX_API_KEY")
+    elif "ollama" in request_url_lower:
+        env_candidates.append("OLLAMA_API_KEY")
+
+    env_candidates.extend(["OPENAI_API_KEY", "MINIMAX_API_KEY", "OLLAMA_API_KEY"])
+    for env_name in env_candidates:
+        value = os.environ.get(env_name)
+        if value:
+            return value
+
+    raise ValueError(
+        "API key not provided. Set OPENAI_API_KEY, MINIMAX_API_KEY, "
+        "OLLAMA_API_KEY, or pass --api_key."
+    )
+
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
     """Returns the number of tokens used by a list of messages."""
-    try:
-        encoding = tiktoken.encoding_for_model(model)
-    except KeyError:
-        print("Warning: model not found. Using cl100k_base encoding.")
-        encoding = tiktoken.get_encoding("cl100k_base")
+    # Check if model is known or uses cl100k_base encoding
+    known_models = ['gpt-3.5-turbo', 'gpt-4', 'gpt-3.5-turbo-0301', 'gpt-4-0314']
+    uses_cl100k = any(x in model.lower() for x in ['gpt-3.5', 'gpt-4', 'minimax', 'glm', 'ollama', 'nemotron', 'qwen', 'deepseek'])
+
+    if not uses_cl100k and model not in known_models:
+        raise NotImplementedError(f"""num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.""")
+
+    # Use cl100k_base for these models (same as GPT-3.5)
+    encoding = tiktoken.get_encoding("cl100k_base")
+
     if model == "gpt-3.5-turbo":
         # print("Warning: gpt-3.5-turbo may change over time. Returning num tokens assuming gpt-3.5-turbo-0301.")
         return num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301")
@@ -45,8 +95,8 @@ def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
         tokens_per_name = 1
     elif 'gpt-3.5' in model:
         return num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301")
-    elif 'MiniMax' in model:
-        # MiniMax uses cl100k_base encoding, same as GPT-3.5
+    elif 'minimax' in model.lower() or 'glm' in model.lower() or 'ollama' in model.lower() or 'nemotron' in model.lower() or 'qwen' in model.lower() or 'deepseek' in model.lower():
+        # Ollama/glm/nemotron/qwen uses cl100k_base encoding, same as GPT-3.5
         tokens_per_message = 4
         tokens_per_name = -1
     else:
@@ -71,33 +121,33 @@ async def async_api_requests(
     result_file_name: str = None,
     task: str = None,
     dataset: str = None,
-    model: str ='MiniMax-M2.7-highspeed',
+    model: str ='glm-5.1:cloud',
     dataNum: int =0,
     testNum: int =1,
     method: str ='base',
     max_token: int =8000,
+    response_max_token: int = None,
     max_attempts: int =10,
+    max_concurrent_requests: int =2,
+    save_every: int =50,
     temperature: float = 0,
     choices: int = 1,
     data = None,
     ):
 
-    # Get API key from environment if not provided
-    if api_key is None:
-        api_key = os.environ.get('MINIMAX_API_KEY')
-        if api_key is None:
-            raise ValueError("API key not provided and MINIMAX_API_KEY not set in environment")
+    api_key = resolve_api_key(api_key, request_url)
     """Processes API requests in parallel, throttling to stay under rate limits."""
     # constants
     seconds_to_pause_after_rate_limit_error = 15
     seconds_to_sleep_each_loop = 0.01  # 1 ms limits max throughput to 1,000 requests per second
 
     # infer API endpoint and construct request header
-    request_header = {"Authorization": f"Bearer {api_key}"}
+    request_header = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     # initialize trackers
     queue_of_requests_to_retry = asyncio.Queue()
     status_tracker = StatusTracker()  # single instance to track a collection of variables
+    write_lock = asyncio.Lock()
     next_request = None  # variable to hold the next request to call
 
     # initialize available capacity counts
@@ -115,11 +165,21 @@ async def async_api_requests(
 
     """read results from json file"""
     print(results_json_file)
-    try:
-        with open(results_json_file) as f:
-            results_list = json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        results_list = []
+    results_list = load_results_file(results_json_file)
+    results_list = [item for item in results_list if not is_error_result(item)]
+
+    existing_ids = {str(item.get('id')) for item in results_list if isinstance(item, dict)}
+    testNum = min(testNum, len(data))
+    if existing_ids:
+        data = data[:testNum]
+        data = [item for item in data if str(item.get('id')) not in existing_ids]
+        print(f"Skipping {len(existing_ids)} existing results; {len(data)} requests remaining")
+        testNum = len(data)
+        dataNum = 0
+
+    if testNum == 0:
+        print("No requests remaining; keeping existing results file unchanged")
+        return
 
     """config logging file"""
     logging_level = 'WARNING'
@@ -128,10 +188,12 @@ async def async_api_requests(
     logging.debug(f"Initialization complete.")
 
     """call api"""
-    # openai.api_key = api_key  # Not needed for MiniMax
+    # openai.api_key = api_key  # Not needed for Ollama
     testNum = min(testNum, len(data))
     global pbar
-    pbar = tqdm(total = testNum-dataNum) 
+    pbar = tqdm(total = testNum-dataNum)
+    timeout = aiohttp.ClientTimeout(total=60, connect=20, sock_connect=20, sock_read=45)
+    session = aiohttp.ClientSession(timeout=timeout)
     while(True):
         # get next request (if one is not already waiting for capacity)
         if next_request is None:
@@ -144,13 +206,14 @@ async def async_api_requests(
                     messages = data[dataNum]['prompt']
                     request_truth = data[dataNum]['ground_truth']
                     
-                    request_json = {
-                        "model":model,
-                        "messages":messages,
-                        "temperature":temperature,
-                        "top_p":1,
-                        "stream":False,
-                    }
+                    request_json = build_chat_request_payload(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        choices=choices,
+                        max_token=response_max_token or max_token,
+                        request_url=request_url,
+                    )
                     next_request = APIRequest(
                         request_id=request_id,
                         request_json=request_json,
@@ -189,6 +252,7 @@ async def async_api_requests(
             if (
                 available_request_capacity >= 1
                 and available_token_capacity >= next_request_tokens
+                and status_tracker.num_tasks_in_progress <= max_concurrent_requests
             ):
                 # update counters
                 available_request_capacity -= 1
@@ -203,6 +267,9 @@ async def async_api_requests(
                         retry_queue=queue_of_requests_to_retry,
                         save_filepath=results_json_file,
                         status_tracker=status_tracker,
+                        write_lock=write_lock,
+                        save_every=save_every,
+                        session=session,
                     )
                 )
                 next_request = None  # reset next_request to empty
@@ -222,7 +289,10 @@ async def async_api_requests(
             # ^e.g., if pause is 15 seconds and final limit was hit 5 seconds ago
             logging.warning(f"Pausing to cool down until {time.ctime(status_tracker.time_of_last_rate_limit_error + seconds_to_pause_after_rate_limit_error)}")
 
+    await session.close()
+
     # after finishing, log final status
+    write_file(results_list, results_json_file)
     logging.info(f"""Parallel processing complete. Results saved to {results_json_file}""")
     if status_tracker.num_tasks_failed > 0:
         logging.warning(f"{status_tracker.num_tasks_failed} / {status_tracker.num_tasks_started} requests failed. Errors logged to {results_json_file}.")
@@ -240,6 +310,7 @@ class StatusTracker:
     num_api_errors: int = 0  # excluding rate limit errors, counted above
     num_other_errors: int = 0
     time_of_last_rate_limit_error: int = 0  # used to cool off after hitting rate limits
+    num_results_since_save: int = 0
 
 @dataclass
 class APIRequest:
@@ -262,23 +333,43 @@ class APIRequest:
         retry_queue: asyncio.Queue,
         save_filepath: str,
         status_tracker: StatusTracker,
+        write_lock: asyncio.Lock,
+        save_every: int,
+        session: aiohttp.ClientSession = None,
     ):
         """Calls the OpenAI API and saves results."""
         logging.info(f"Starting request #{self.request_id}")
         error = None
+        response_data = {}
         try:
-            async with aiohttp.ClientSession() as session:
+            if session is None:
+                timeout = aiohttp.ClientTimeout(total=60, connect=20, sock_connect=20, sock_read=45)
+                async with aiohttp.ClientSession(timeout=timeout) as owned_session:
+                    async with owned_session.post(
+                        url=request_url, headers=request_header, json=self.request_json
+                    ) as http_response:
+                        text = await http_response.text()
+            else:
                 async with session.post(
                     url=request_url, headers=request_header, json=self.request_json
-                ) as response:
-                    response = await response.json()
-            if "error" in response:
+                ) as http_response:
+                    text = await http_response.text()
+
+            # Handle NDJSON (streaming) responses
+            try:
+                response_data = json.loads(text)
+            except json.JSONDecodeError:
+                lines = text.strip().split('\n')
+                response_data = json.loads(lines[0]) if lines else {}
+            if "error" in response_data:
+                error_obj = response_data["error"]
+                error_message = error_obj.get("message", "") if isinstance(error_obj, dict) else str(error_obj)
                 logging.warning(
-                    f"Request {self.request_id} failed with error {response['error']}"
+                    f"Request {self.request_id} failed with error {error_obj}"
                 )
                 status_tracker.num_api_errors += 1
-                error = response
-                if "Rate limit" in response["error"].get("message", ""):
+                error = response_data
+                if "rate limit" in error_message.lower() or "too many concurrent" in error_message.lower():
                     status_tracker.time_of_last_rate_limit_error = time.time()
                     status_tracker.num_rate_limit_errors += 1
                     status_tracker.num_api_errors -= 1  # rate limit errors are counted separately
@@ -299,29 +390,79 @@ class APIRequest:
                     else [self.request_json, [str(e) for e in self.result]]
                 )
                 # print(data)
-                result = {'id': self.request_id, 'ground_truth':self.request_truth, 'prompt': self.request_json, 'response':response}
-                self.results_list.append(result)
-                write_file(self.results_list, save_filepath)
+                result = {'id': self.request_id, 'ground_truth':self.request_truth, 'prompt': self.request_json, 'response': _json_safe(response_data)}
+                async with write_lock:
+                    self.results_list.append(result)
+                    status_tracker.num_results_since_save += 1
+                    write_file(self.results_list, save_filepath)
+                    status_tracker.num_results_since_save = 0
                 status_tracker.num_tasks_in_progress -= 1
                 status_tracker.num_tasks_failed += 1
         else:
             data = (
-                [self.request_json, response, self.metadata]
+                [self.request_json, response_data, self.metadata]
                 if self.metadata
-                else [self.request_json, response]
+                else [self.request_json, response_data]
             )
             # print(data)
-            result = {'id': self.request_id, 'ground_truth':self.request_truth, 'prompt': self.request_json, 'response':response}
-            self.results_list.append(result)
-            write_file(self.results_list, save_filepath)
+            result = {'id': self.request_id, 'ground_truth':self.request_truth, 'prompt': self.request_json, 'response': _json_safe(response_data)}
+            async with write_lock:
+                self.results_list.append(result)
+                status_tracker.num_results_since_save += 1
+                if save_every <= 1 or status_tracker.num_results_since_save >= save_every:
+                    write_file(self.results_list, save_filepath)
+                    status_tracker.num_results_since_save = 0
             status_tracker.num_tasks_in_progress -= 1
             status_tracker.num_tasks_succeeded += 1
             logging.debug(f"Request {self.request_id} saved to {save_filepath}")
             pbar.update(1)
 
+def load_results_file(results_json_file):
+    for path in (results_json_file, results_json_file + '.backup'):
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, list) else []
+        except (json.JSONDecodeError, FileNotFoundError):
+            continue
+    return []
+
+def is_error_result(item):
+    if not isinstance(item, dict):
+        return False
+    response = item.get('response')
+    return isinstance(response, dict) and 'error' in response
+
+def _json_safe(value):
+    try:
+        json.dumps(value)
+        return value
+    except TypeError:
+        if isinstance(value, dict):
+            return {str(k): _json_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_json_safe(v) for v in value]
+        return str(value)
+
 def write_file(results_list, results_json_file):
     backup_path = results_json_file + '.backup'
-    if os.path.exists(results_json_file):
-        shutil.copy(results_json_file, backup_path)
-    with open(results_json_file, "w+") as f:
-        json.dump(results_list, f)
+    tmp_path = results_json_file + '.tmp'
+    for attempt in range(20):
+        try:
+            if os.path.exists(results_json_file) and os.path.getsize(results_json_file) > 0:
+                shutil.copy(results_json_file, backup_path)
+            break
+        except PermissionError:
+            if attempt == 19:
+                raise
+            time.sleep(0.1)
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(_json_safe(results_list), f)
+    for attempt in range(20):
+        try:
+            os.replace(tmp_path, results_json_file)
+            return
+        except PermissionError:
+            if attempt == 19:
+                raise
+            time.sleep(0.1)

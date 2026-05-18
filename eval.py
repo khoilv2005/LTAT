@@ -40,16 +40,18 @@ def extract_prediction(response_content):
 
     content = str(response_content).strip()
 
-    # Try to find **Answer: (X) Label** pattern (MiniMax format)
     import re
-    answer_match = re.search(r'\*\*Answer:\s*\(([A-D])\)\s*(\w+)\*\*', content, re.IGNORECASE)
-    if answer_match:
-        return f"({answer_match.group(1)}) {answer_match.group(2)}"
+    # Find ALL matches and take the LAST one (for thinking models that reconsider)
+    all_matches = re.findall(r'\*\*Answer:\s*\(([A-D])\)\s*(\w+)\*\*', content, re.IGNORECASE)
+    if all_matches:
+        last_match = all_matches[-1]
+        return f"({last_match[0]}) {last_match[1]}"
 
     # Try to find "Answer:" pattern without bold
-    answer_match = re.search(r'Answer:\s*\(([A-D])\)\s*(\w+)', content, re.IGNORECASE)
-    if answer_match:
-        return f"({answer_match.group(1)}) {answer_match.group(2)}"
+    all_matches = re.findall(r'Answer:\s*\(([A-D])\)\s*(\w+)', content, re.IGNORECASE)
+    if all_matches:
+        last_match = all_matches[-1]
+        return f"({last_match[0]}) {last_match[1]}"
 
     # Try to find category after "Category:" or "category:"
     if "Category:" in content:
@@ -72,6 +74,7 @@ def normalize_prediction(pred, task, dataset):
         return None
 
     pred = str(pred).strip()
+    task_normalized = 'SBRP' if str(task).lower() == 'sbrp' else task
 
     # Handle MiniMax format: **Answer: (X) Label**
     # Extract (A), (B), (C), (D) patterns
@@ -81,13 +84,20 @@ def normalize_prediction(pred, task, dataset):
         letter = answer_match.group(1).upper()
         label = answer_match.group(2).lower()
 
-        if task == 'SBRP':
-            if letter == 'A' or 'security' in label:
+        if task_normalized == 'SBRP':
+            # Prefer label text because paper expertise prompt uses
+            # (A) SBR, (B) NBR while self-heuristic uses the reverse order.
+            if 'non' in label or label == 'nbr':
+                return '0'
+            elif 'security' in label or label == 'sbr':
                 return '1'
-            elif letter == 'B' or 'non' in label:
+            # Paper's SBRP expertise prompt: (A) SBR, (B) NBR.
+            if letter == 'A':
+                return '1'
+            elif letter == 'B':
                 return '0'
 
-        elif task == 'cvss':
+        elif task_normalized == 'cvss':
             # AV: (A) Network(1), (B) Adjacent(2), (C) Physical(3), (D) Not Related(0)
             if dataset == 'AV':
                 if letter == 'A' or 'network' in label:
@@ -105,14 +115,18 @@ def normalize_prediction(pred, task, dataset):
                 elif letter == 'B' or 'high' in label:
                     return '1'
 
-        elif task == 'APCA':
+        elif task_normalized == 'APCA':
             # CoF = Correct (1), NCF = Incorrect (0)
-            if letter == 'A' or 'correct' in label or 'cof' in label:
+            if 'incorrect' in label or 'ncf' in label:
+                return '0'
+            elif 'correct' in label or 'cof' in label:
                 return '1'
-            elif letter == 'B' or 'incorrect' in label or 'ncf' in label:
+            elif letter == 'A':
+                return '1'
+            elif letter == 'B':
                 return '0'
 
-        elif task == 'stable':
+        elif task_normalized == 'stable':
             if letter == 'A' or 'ack' in label or 'true' in label:
                 return 'true'
             elif letter == 'B' or 'nak' in label or 'false' in label:
@@ -121,13 +135,17 @@ def normalize_prediction(pred, task, dataset):
     # Fallback to old keyword-based matching
     pred_lower = pred.lower()
 
-    if task == 'SBRP':
-        if 'security' in pred_lower and 'non' not in pred_lower:
+    if task_normalized == 'SBRP':
+        if pred_lower in ['sbr', 'security bug report']:
+            return '1'
+        elif pred_lower in ['nbr', 'non-security bug report']:
+            return '0'
+        elif 'security' in pred_lower and 'non' not in pred_lower:
             return '1'
         elif 'non' in pred_lower or 'non-security' in pred_lower:
             return '0'
 
-    elif task == 'cvss':
+    elif task_normalized == 'cvss':
         if dataset == 'AV':
             if 'not' in pred_lower and 'related' in pred_lower:
                 return '0'
@@ -143,19 +161,61 @@ def normalize_prediction(pred, task, dataset):
             elif 'high' in pred_lower:
                 return '1'
 
-    elif task == 'APCA':
-        if 'cof' in pred_lower or 'correct' in pred_lower:
-            return '1'
-        elif 'ncf' in pred_lower or 'incorrect' in pred_lower:
+    elif task_normalized == 'APCA':
+        if 'ncf' in pred_lower or 'incorrect' in pred_lower:
             return '0'
+        elif 'cof' in pred_lower or 'correct' in pred_lower:
+            return '1'
 
-    elif task == 'stable':
+    elif task_normalized == 'stable':
         if 'ack' in pred_lower or 'true' in pred_lower:
             return 'true'
         elif 'nak' in pred_lower or 'false' in pred_lower:
             return 'false'
 
     return pred
+
+def normalize_ground_truth(label, task, dataset):
+    """Normalize dataset labels into the same space as predictions."""
+    if label is None:
+        return None
+
+    value = str(label).strip()
+    lower = value.lower()
+    task_normalized = 'SBRP' if str(task).lower() == 'sbrp' else task
+
+    if task_normalized == 'SBRP':
+        if lower in ['1', 'sbr', 'security bug report', 'security bug']:
+            return '1'
+        if lower in ['0', 'nbr', 'non-security bug report', 'non-security bug']:
+            return '0'
+
+    elif task_normalized == 'APCA':
+        if lower in ['1', 'true', 'correct', 'cof', 'correct patch']:
+            return '1'
+        if lower in ['0', 'false', 'incorrect', 'ncf', 'incorrect patch']:
+            return '0'
+
+    elif task_normalized == 'stable':
+        if lower in ['true', '1', 'stable', 'ack']:
+            return 'true'
+        if lower in ['false', '0', 'non-stable', 'nak']:
+            return 'false'
+
+    return value
+
+def response_content(response):
+    """Return assistant text across OpenAI/Ollama response shapes."""
+    if isinstance(response, dict):
+        choices = response.get('choices', [])
+        if choices:
+            return choices[0].get('message', {}).get('content', '')
+        if 'message' in response and isinstance(response['message'], dict):
+            return response['message'].get('content', '')
+        if 'response' in response:
+            return response.get('response', '')
+        return ''
+    return str(response)
 
 
 def evaluate_title(results):
@@ -192,7 +252,14 @@ def evaluate_title(results):
 
         if isinstance(response, dict):
             choices = response.get('choices', [])
-            content = choices[0].get('message', {}).get('content', '').strip() if choices else ''
+            if choices:
+                content = choices[0].get('message', {}).get('content', '').strip()
+            elif 'message' in response and isinstance(response['message'], dict):
+                content = response['message'].get('content', '').strip()
+            elif 'response' in response:
+                content = response.get('response', '').strip()
+            else:
+                content = ''
         else:
             content = str(response).strip()
 
@@ -256,6 +323,10 @@ def _evaluate_title_exact(results):
             choices = response.get('choices', [])
             if choices:
                 content = choices[0].get('message', {}).get('content', '').strip().lower()
+            elif 'message' in response and isinstance(response['message'], dict):
+                content = response['message'].get('content', '').strip().lower()
+            elif 'response' in response:
+                content = response.get('response', '').strip().lower()
             else:
                 content = ''
         else:
@@ -305,23 +376,16 @@ def evaluate_classification(results, task, dataset):
     y_true_binary = []
     y_pred_binary = []
     auc = None
+    unparsed = 0
 
     for item in results:
-        ground_truth = str(item.get('ground_truth', '')).strip()
-        response = item.get('response', {})
-
-        # Handle different response formats
-        if isinstance(response, dict):
-            choices = response.get('choices', [])
-            if choices:
-                content = choices[0].get('message', {}).get('content', '')
-            else:
-                content = ''
-        else:
-            content = str(response)
+        ground_truth = normalize_ground_truth(item.get('ground_truth', ''), task, dataset)
+        content = response_content(item.get('response', {}))
 
         pred = extract_prediction(content)
         pred_normalized = normalize_prediction(pred, task, dataset)
+        if str(pred_normalized) not in {'0', '1', '2', '3', 'true', 'false'}:
+            unparsed += 1
 
         all_labels.add(ground_truth)
         predictions.append((ground_truth, pred_normalized))
@@ -339,6 +403,7 @@ def evaluate_classification(results, task, dataset):
     print(f"Total samples: {total}")
     print(f"Correct: {correct}")
     print(f"Accuracy: {accuracy:.4f} ({accuracy*100:.2f}%)")
+    print(f"Unparsed predictions: {unparsed}")
 
     # Per-class breakdown
     print(f"\n{'='*60}")
@@ -411,7 +476,8 @@ def evaluate_classification(results, task, dataset):
         'accuracy': accuracy,
         'macro_f1': macro_f1,
         'total': total,
-        'correct': correct
+        'correct': correct,
+        'unparsed': unparsed
     }
 
     if is_apca or task == 'stable':
@@ -442,16 +508,12 @@ def evaluate_vulfix(results):
     print(f"See paper Section 4.4 for methodology.")
 
     for item in results:
-        response = item.get('response', {})
-        if isinstance(response, dict):
-            choices = response.get('choices', [])
-            if choices:
-                content = choices[0].get('message', {}).get('content', '')
-                if content and len(content.strip()) > 0:
-                    has_response += 1
-                    # Check if content looks like code
-                    if '```' in content or 'def ' in content or 'patch' in content.lower():
-                        samples_with_code += 1
+        content = response_content(item.get('response', {}))
+        if content and len(content.strip()) > 0:
+            has_response += 1
+            # Check if content looks like code
+            if '```' in content or 'def ' in content or 'patch' in content.lower():
+                samples_with_code += 1
 
     print(f"Samples with response: {has_response}")
     print(f"Samples with code blocks: {samples_with_code}")
