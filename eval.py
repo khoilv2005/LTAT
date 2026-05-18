@@ -13,6 +13,7 @@ import os
 import sys
 import json
 import argparse
+import re
 from collections import defaultdict
 
 # Add project root to path
@@ -41,6 +42,10 @@ def extract_prediction(response_content):
     content = str(response_content).strip()
 
     import re
+    final_label_matches = re.findall(r'final\s+answer\s*:\s*(SBR|NBR)\b', content, re.IGNORECASE)
+    if final_label_matches:
+        return final_label_matches[-1].upper()
+
     # Find ALL matches and take the LAST one (for thinking models that reconsider)
     all_matches = re.findall(r'\*\*Answer:\s*\(([A-D])\)\s*(\w+)\*\*', content, re.IGNORECASE)
     if all_matches:
@@ -65,6 +70,68 @@ def extract_prediction(response_content):
 
     # For title task - return as is
     return content
+
+
+def infer_sbrp_from_reasoning(text):
+    """Infer SBRP labels from truncated reasoning when no final label exists."""
+    if text is None:
+        return None
+
+    lower = str(text).lower()
+    lower = lower.replace("non security", "non-security")
+    lower = lower.replace("use after freed", "use-after-free")
+    lower = lower.replace("use after free", "use-after-free")
+
+    # Explicit non-security conclusions often appear before the truncated tail.
+    negative_patterns = [
+        r"\bnon-security bug report\b",
+        r"\bnot (?:a |an )?(?:software )?vulnerability\b",
+        r"\bnot (?:a |an )?(?:direct )?vulnerability report\b",
+        r"\bnot (?:a |an )?security (?:bug|issue|vulnerability|bug report)\b",
+        r"\bnot (?:directly )?related to (?:a |any )?vulnerability\b",
+        r"\bdoes not describe (?:a |any )?vulnerability\b",
+        r"\bdoesn't describe (?:a |any )?vulnerability\b",
+        r"\bdoes not indicate (?:a |any )?vulnerability\b",
+        r"\bdoes not involve (?:a |any )?vulnerability\b",
+        r"\bno (?:explicit )?mention of (?:any )?vulnerability\b",
+        r"\bno mention of .*?(?:memory leak|null pointer|vulnerability)\b",
+        r"\bnot describe any vulnerability\b",
+        r"\bnot a description of (?:a |any )?vulnerability\b",
+        r"\bthis is (?:a |an )?(?:ui|ux|visual|rendering|display|cosmetic|feature|functionality|performance|test|flaky|reliability|compatibility|localization|formatting|typography|usability) (?:issue|bug|problem|request)\b",
+        r"\bfeature request\b",
+    ]
+    for pattern in negative_patterns:
+        if re.search(pattern, lower):
+            return '0'
+
+    # Explicit security conclusions or vulnerability classes.
+    positive_patterns = [
+        r"\bsecurity bug report\b",
+        r"\bsecurity vulnerability\b",
+        r"\bclassic .* vulnerability\b",
+        r"\bmemory safety (?:issue|bug|vulnerability)\b",
+        r"\bnull pointer dereference\b",
+        r"\bnull pointer (?:problem|issue|bug)\b",
+        r"\bmemory leak\b",
+        r"\buse-after-free\b",
+        r"\bout[- ]of[- ]bounds\b",
+        r"\bbuffer overflow\b",
+        r"\bheap overflow\b",
+        r"\bstack overflow\b",
+        r"\bprivilege escalation\b",
+        r"\bunauthorized access\b",
+        r"\bdata (?:leak|leakage|theft|exposure)\b",
+        r"\bcross-site scripting\b",
+        r"\bxss\b",
+        r"\bremote code execution\b",
+        r"\barbitrary code execution\b",
+        r"\bexploit(?:able|ation)?\b",
+    ]
+    for pattern in positive_patterns:
+        if re.search(pattern, lower):
+            return '1'
+
+    return None
 
 
 def normalize_prediction(pred, task, dataset):
@@ -136,14 +203,17 @@ def normalize_prediction(pred, task, dataset):
     pred_lower = pred.lower()
 
     if task_normalized == 'SBRP':
-        if pred_lower in ['sbr', 'security bug report']:
+        if pred_lower in ['sbr', 'final answer: sbr', 'security bug report']:
             return '1'
-        elif pred_lower in ['nbr', 'non-security bug report']:
+        elif pred_lower in ['nbr', 'final answer: nbr', 'non-security bug report']:
             return '0'
-        elif 'security' in pred_lower and 'non' not in pred_lower:
-            return '1'
+        inferred = infer_sbrp_from_reasoning(pred_lower)
+        if inferred is not None:
+            return inferred
         elif 'non' in pred_lower or 'non-security' in pred_lower:
             return '0'
+        elif 'security' in pred_lower:
+            return '1'
 
     elif task_normalized == 'cvss':
         if dataset == 'AV':
