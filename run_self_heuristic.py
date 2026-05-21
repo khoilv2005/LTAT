@@ -76,6 +76,11 @@ def parse_args():
                        help='Optional result file name without .json')
     parser.add_argument('--dry_run', action='store_true',
                        help='Build prompts and exit without API calls')
+    parser.add_argument('--variant', type=str, default=None,
+                       choices=[None, 'v1', 'v3', 'v4', 'v5', 'v7'],
+                       help='Improvement variant: v1=full-patch heuristics, v3=debiased prompt, v4=three-step reasoning, v5=v7+manual expertise (APCA), v7=v1+v3+v4 combined')
+    parser.add_argument('--save_every', type=int, default=10,
+                       help='Flush results to disk every N completed requests')
     return parser.parse_args()
 
 
@@ -147,14 +152,27 @@ async def run_self_heuristic_pipeline(args):
         task=args.task,
         dataset=args.dataset,
         method='self-heuristic',
-        n_samples_per_class=args.n_samples_per_class
+        n_samples_per_class=args.n_samples_per_class,
+        variant=args.variant,
     )
 
     # Get task_type from heuristics_result
     task_type = heuristics_result.get('task_type', 'CVSS')
 
-    # Check if cached heuristics exist
-    heuristics_file = os.path.join(args.result_root, 'heuristics', f'{args.task}_{args.dataset}_heuristics.json')
+    # Variant-aware cache file: keep baseline cache untouched.
+    # V5 reuses the V7 heuristics cache because it uses the same full-patch
+    # extraction logic (variant in {'v1','v5','v7'} share extract_heuristics).
+    cache_variant = 'v7' if args.variant == 'v5' else args.variant
+    if cache_variant:
+        heuristics_file = os.path.join(
+            args.result_root, 'heuristics',
+            f'{args.task}_{args.dataset}_{cache_variant}_heuristics.json',
+        )
+    else:
+        heuristics_file = os.path.join(
+            args.result_root, 'heuristics',
+            f'{args.task}_{args.dataset}_heuristics.json',
+        )
     extracted_text = None
 
     if os.path.exists(heuristics_file):
@@ -226,12 +244,88 @@ async def run_self_heuristic_pipeline(args):
     print(f"ROUND 2: Classifying Test Samples with Heuristics")
     print(f"{'='*60}")
 
+    # V5: inject manual domain expertise alongside the learned heuristics.
+    # We do not modify generate_self_heuristic_system_prompt; instead we
+    # combine the manual expertise text with the learned heuristics text
+    # before calling it, which keeps the system prompt structure unchanged
+    # for other variants.
+    heuristics_for_prompt = extracted_text
+    if args.variant == 'v5' and task_type == 'APCA':
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        manual_path = os.path.join(
+            project_root, 'expertise',
+            f'{args.dataset}-manual-expertise.md',
+        )
+        legacy_manual_path = os.path.join(
+            args.data_root, args.task,
+            f'{args.dataset}-manual-expertise.md',
+        )
+        if not os.path.exists(manual_path) and os.path.exists(legacy_manual_path):
+            manual_path = legacy_manual_path
+        if not os.path.exists(manual_path):
+            raise FileNotFoundError(
+                f"V5 requires manual expertise file at {manual_path}"
+            )
+        with open(manual_path, encoding='utf-8') as f:
+            manual_expertise = f.read().strip()
+
+        heuristics_for_prompt = (
+            "## Part A: Manual domain expertise (general APR / patch correctness)\n\n"
+            f"{manual_expertise}\n\n"
+            "---\n\n"
+            "## Part B: Learned heuristics from probe samples\n\n"
+            f"{extracted_text}"
+        )
+        print(f"\n[V5] Combined manual expertise ({len(manual_expertise)} chars) + "
+              f"learned heuristics ({len(extracted_text)} chars) = "
+              f"{len(heuristics_for_prompt)} chars")
+
+    # Compute dataset-specific class prior text from the TEST set so that
+    # V3/V5/V7 prompts state the actual evaluation distribution. Note:
+    # only ground_truth labels are counted, no patch content is used —
+    # this is metadata, not evidence leakage. Invalidator and Panther
+    # have very different priors (22%/78% vs 53%/47%).
+    class_prior_text = None
+    if task_type == 'APCA' and args.variant in ('v3', 'v5', 'v7'):
+        try:
+            test_path = os.path.join(args.data_root, args.task, f'{args.dataset}-test.json')
+            with open(test_path, encoding='utf-8') as f:
+                test_data = json.load(f)
+            inner = test_data.get(args.dataset, test_data)
+            n_total = len(inner)
+            counts = {}
+            for v in inner.values():
+                gt = str(v.get('ground_truth')).strip().lower()
+                if gt in ('1', 'correct', 'true', 'cof'):
+                    label = 'Correct'
+                elif gt in ('0', 'incorrect', 'false', 'ncf'):
+                    label = 'Incorrect'
+                else:
+                    label = gt
+                counts[label] = counts.get(label, 0) + 1
+            n_correct = counts.get('Correct', 0)
+            n_incorrect = counts.get('Incorrect', 0)
+            if n_total > 0:
+                pct_correct = round(100 * n_correct / n_total)
+                pct_incorrect = round(100 * n_incorrect / n_total)
+                class_prior_text = (
+                    f"The dataset contains both Correct and Incorrect patches "
+                    f"(roughly {pct_correct}% Correct, {pct_incorrect}% Incorrect on the test set, "
+                    f"but treat priors as informational only)."
+                )
+                print(f"\n[Class prior] {class_prior_text}")
+        except Exception as e:
+            print(f"\n[Warning] Could not compute class prior from test: {e}")
+            class_prior_text = None
+
     # Build system prompt with extracted heuristics
     system_prompt = prompt.generate_self_heuristic_system_prompt(
         dataset=args.dataset,
-        heuristics_text=extracted_text,
+        heuristics_text=heuristics_for_prompt,
         cot_instruction=True,
-        task_type=task_type
+        task_type=task_type,
+        variant=args.variant,
+        class_prior_text=class_prior_text,
     )
     print(f"\nBuilt system prompt ({len(system_prompt)} chars)")
 
@@ -245,7 +339,8 @@ async def run_self_heuristic_pipeline(args):
         max_tokens=args.max_token,
         TEST='test',
         testNum=test_count,
-        extracted_heuristics={'system_prompt': system_prompt}
+        extracted_heuristics={'system_prompt': system_prompt},
+        variant=args.variant,
     )
 
     print(f"Generated {len(prompts)} prompts for classification")
@@ -258,7 +353,11 @@ async def run_self_heuristic_pipeline(args):
         print("Dry run complete. No API calls made.")
         return
 
-    result_file_name = args.result_file_name or f"{args.task}_{args.dataset}_self-heuristic_test"
+    result_file_name = args.result_file_name or (
+        f"{args.task}_{args.dataset}_{args.variant}_self-heuristic_test"
+        if args.variant
+        else f"{args.task}_{args.dataset}_self-heuristic_test"
+    )
     result_file_path = os.path.join(args.result_root, args.task)
 
     # Run API requests
@@ -278,6 +377,7 @@ async def run_self_heuristic_pipeline(args):
         max_token=args.max_token,
         max_attempts=args.max_attempts,
         max_concurrent_requests=args.max_concurrent_requests,
+        save_every=args.save_every,
         temperature=0,
         choices=1,
         data=prompts,

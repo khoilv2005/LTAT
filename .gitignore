@@ -39,6 +39,7 @@ env/
 
 # Claude Code
 .claude/
+.kiro/
 
 # Results and logs
 results/

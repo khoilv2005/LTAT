@@ -37,7 +37,7 @@ def build_chat_request_payload(model, messages, temperature=0, choices=1, max_to
 
     if "ollama" in request_url_lower:
         payload["think"] = False
-        payload["options"] = {"num_predict": min(max_token, 1024)}
+        payload["options"] = {"num_predict": min(max_token, 2048)}
     else:
         payload["max_tokens"] = max_token
         if choices and choices > 1:
@@ -138,7 +138,7 @@ async def async_api_requests(
     api_key = resolve_api_key(api_key, request_url)
     """Processes API requests in parallel, throttling to stay under rate limits."""
     # constants
-    seconds_to_pause_after_rate_limit_error = 15
+    seconds_to_pause_after_rate_limit_error = 60
     seconds_to_sleep_each_loop = 0.01  # 1 ms limits max throughput to 1,000 requests per second
 
     # infer API endpoint and construct request header
@@ -192,7 +192,7 @@ async def async_api_requests(
     testNum = min(testNum, len(data))
     global pbar
     pbar = tqdm(total = testNum-dataNum)
-    timeout = aiohttp.ClientTimeout(total=60, connect=20, sock_connect=20, sock_read=45)
+    timeout = aiohttp.ClientTimeout(total=300, connect=30, sock_connect=30, sock_read=240)
     session = aiohttp.ClientSession(timeout=timeout)
     while(True):
         # get next request (if one is not already waiting for capacity)
@@ -343,7 +343,7 @@ class APIRequest:
         response_data = {}
         try:
             if session is None:
-                timeout = aiohttp.ClientTimeout(total=60, connect=20, sock_connect=20, sock_read=45)
+                timeout = aiohttp.ClientTimeout(total=300, connect=30, sock_connect=30, sock_read=240)
                 async with aiohttp.ClientSession(timeout=timeout) as owned_session:
                     async with owned_session.post(
                         url=request_url, headers=request_header, json=self.request_json

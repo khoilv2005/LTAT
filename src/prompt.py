@@ -64,7 +64,7 @@ def build_self_heuristic_prompt_item(system_prompt, item_text, question):
         {'role': 'user', 'content': item_text + '\n\n' + question},
     ]
 
-def extract_heuristics(root, task, dataset, method='self-heuristic', n_samples_per_class=5):
+def extract_heuristics(root, task, dataset, method='self-heuristic', n_samples_per_class=5, variant=None):
     """
     Round 1 of self-heuristic: Extract classification rules from training examples.
 
@@ -77,6 +77,8 @@ def extract_heuristics(root, task, dataset, method='self-heuristic', n_samples_p
         dataset: Dataset name (e.g., 'AV')
         method: Currently only 'self-heuristic'
         n_samples_per_class: Number of examples per class to include
+        variant: Optional improvement variant id. When variant in {'v1','v7'},
+                 APCA patches are kept up to 2000 chars instead of 150.
 
     Returns:
         dict with 'heuristics' (str) containing the extracted rules
@@ -193,6 +195,10 @@ def extract_heuristics(root, task, dataset, method='self-heuristic', n_samples_p
     # Class nào có ít hơn thì lấy hết, class nào có nhiều hơn thì lấy n_samples_per_class
     n_to_take = n_samples_per_class
 
+    # V1/V5/V7: keep APCA patches longer so the model sees actual diff content
+    apca_full_patch = task_type == 'APCA' and variant in ('v1', 'v5', 'v7')
+    apca_patch_cap = 2000 if apca_full_patch else 150
+
     # Build examples string for the prompt
     examples_str = []
     for gt, samples in sorted(class_samples.items(), key=lambda x: x[0]):
@@ -200,14 +206,17 @@ def extract_heuristics(root, task, dataset, method='self-heuristic', n_samples_p
         examples_str.append(f"\n[{label} (Class {gt})]:")
         # Take up to n_samples_per_class from each class
         for sample in samples[:n_to_take]:
-            content = sample['function'][:150] if sample['function'] else sample['description'][:150]
-            if task_type == 'SBRP':
-                examples_str.append(f"  - Bug Report: {content}...")
-            elif task_type == 'APCA':
-                examples_str.append(f"  - Patch: {content}...")
+            if task_type == 'APCA':
+                content = sample['function'] if sample['function'] else sample['description']
+                content = content[:apca_patch_cap]
+                examples_str.append(f"  - Patch:\n```\n{content}\n```")
             else:
-                examples_str.append(f"  - Function: {sample['function']}")
-                examples_str.append(f"    Description: {sample['description'][:100]}...")
+                content = sample['function'][:150] if sample['function'] else sample['description'][:150]
+                if task_type == 'SBRP':
+                    examples_str.append(f"  - Bug Report: {content}...")
+                else:
+                    examples_str.append(f"  - Function: {sample['function']}")
+                    examples_str.append(f"    Description: {sample['description'][:100]}...")
 
     examples_text = '\n'.join(examples_str)
 
@@ -266,7 +275,7 @@ Let's begin:"""
     }
 
 
-def generate_self_heuristic_system_prompt(dataset, heuristics_text, cot_instruction=True, task_type='CVSS'):
+def generate_self_heuristic_system_prompt(dataset, heuristics_text, cot_instruction=True, task_type='CVSS', variant=None, class_prior_text=None):
     """
     Build the system prompt for Round 2 (classification) by injecting extracted heuristics.
 
@@ -275,6 +284,11 @@ def generate_self_heuristic_system_prompt(dataset, heuristics_text, cot_instruct
         heuristics_text: The extracted rules from Round 1
         cot_instruction: Whether to add step-by-step reasoning instruction
         task_type: 'CVSS' or 'SBRP'
+        variant: Optional improvement variant id. When variant in {'v3','v7'},
+                 APCA system prompt is debiased (no "prefer safer option").
+        class_prior_text: Optional dataset-specific class distribution string
+                 used in V3/V5/V7 APCA prompts. When None, defaults to the
+                 Invalidator-style "22% Correct / 78% Incorrect" message.
 
     Returns:
         str: The system prompt with injected heuristics
@@ -293,7 +307,40 @@ CLASSIFICATION OPTIONS:
 Remember: You must heavily penalize the classification unless there is CLEAR evidence of security relevance. When in doubt, prefer the safer option."""
     elif task_type == 'APCA':
         categories = "(A) Correct Patch, (B) Incorrect Patch"
-        system_base = f"""You are Frederick, an elite AI software security expert specializing in patch correctness assessment.
+        if variant in ('v3', 'v5', 'v7'):
+            # V3/V5/V7: debiased version. The original prompt indirectly biases
+            # the model toward "Incorrect" by emphasizing skepticism. Replace
+            # the trailing instruction with a balance reminder and an explicit
+            # class distribution note so the model assesses each patch on its
+            # own merits.
+            #
+            # V5: also inject manual domain expertise loaded from
+            # data/APCA/APCA_invalidator-manual-expertise.md. The expertise
+            # text must be passed in via the heuristics_text argument
+            # already (the caller is responsible for combining manual + learned
+            # heuristics into a single text block).
+            prior_line = class_prior_text or (
+                "The dataset contains both Correct and Incorrect patches "
+                "(roughly 22% Correct, 78% Incorrect on the test set, "
+                "but treat priors as informational only)."
+            )
+            system_base = f"""You are Frederick, an elite AI software security expert specializing in patch correctness assessment.
+
+Use the following domain knowledge as guidance when making your decision:
+
+{heuristics_text}
+
+CLASSIFICATION OPTIONS:
+{categories}
+
+Important context:
+- {prior_line}
+- Tool-generated patches (from APR tools such as kPAR, jGenProg, AVATAR, Cardumen, RSRepair, Nopol) appear in BOTH classes; do not penalize a patch just because it looks tool-generated.
+- A minimal-looking diff can still be a Correct fix if it semantically resolves the bug; a verbose diff can still be an Incorrect fix if it overfits.
+
+Remember: classify based strictly on the evidence in the patch; do not bias toward either class."""
+        else:
+            system_base = f"""You are Frederick, an elite AI software security expert specializing in patch correctness assessment.
 
 To ensure extreme accuracy, you MUST strictly follow this domain knowledge when making your decision:
 
@@ -332,7 +379,7 @@ Remember: You must heavily penalize the classification unless there is CLEAR evi
     return system_base
 
 
-def generate_prompt(root, task, dataset, method, max_tokens = 8000, TEST = 'vali', testNum = 1, extracted_heuristics=None):
+def generate_prompt(root, task, dataset, method, max_tokens = 8000, TEST = 'vali', testNum = 1, extracted_heuristics=None, variant=None):
     task = normalize_task_name(task)
     method = normalize_method_name(method)
 
@@ -551,10 +598,24 @@ def generate_prompt(root, task, dataset, method, max_tokens = 8000, TEST = 'vali
             if method=='self-heuristic':
                 if extracted_heuristics and 'system_prompt' in extracted_heuristics:
                     system_with_heuristics = extracted_heuristics['system_prompt']
+                    if variant in ('v4', 'v5', 'v7'):
+                        question = (
+                            "Analyze this patch in three explicit steps before answering:\n"
+                            "Step 1 (Bug intent): From the file paths, function names, and surrounding context lines, infer what bug the original code likely has.\n"
+                            "Step 2 (Patch effect): Describe what the diff actually changes semantically (added checks, removed branches, modified conditions, etc.), not just textually.\n"
+                            "Step 3 (Verdict): Decide whether the change in Step 2 plausibly resolves the bug inferred in Step 1, considering side effects.\n"
+                            "After completing the three steps, output your final answer EXACTLY in this format on its own line:\n"
+                            "**Answer: (X) Label**"
+                        )
+                    else:
+                        question = (
+                            'Based on the expert knowledge provided, classify whether this is a Correct Patch or Incorrect Patch. '
+                            'After reasoning, output your final answer EXACTLY in this format:\n**Answer: (X) Label**'
+                        )
                     prompt_item = build_self_heuristic_prompt_item(
                         system_with_heuristics,
                         'Patch:\n' + data[id]['patch'],
-                        'Based on the expert knowledge provided, classify whether this is a Correct Patch or Incorrect Patch. After reasoning, output your final answer EXACTLY in this format:\n**Answer: (X) Label**'
+                        question,
                     )
                     ground_truth = data[id]['ground_truth']
                     prompts.append({'id': id, 'prompt': prompt_item, 'ground_truth': ground_truth})
@@ -586,10 +647,27 @@ def generate_prompt(root, task, dataset, method, max_tokens = 8000, TEST = 'vali
             if method=='self-heuristic':
                 if extracted_heuristics and 'system_prompt' in extracted_heuristics:
                     system_with_heuristics = extracted_heuristics['system_prompt']
+                    if variant in ('v4', 'v5', 'v7'):
+                        # V4/V5/V7: three-step reasoning instructed in the user
+                        # message. Final answer line is preserved so that
+                        # eval.py::extract_prediction can still parse it.
+                        question = (
+                            "Analyze this patch in three explicit steps before answering:\n"
+                            "Step 1 (Bug intent): From the file paths, function names, and surrounding context lines, infer what bug the original code likely has.\n"
+                            "Step 2 (Patch effect): Describe what the diff actually changes semantically (added checks, removed branches, modified conditions, etc.), not just textually.\n"
+                            "Step 3 (Verdict): Decide whether the change in Step 2 plausibly resolves the bug inferred in Step 1, considering side effects.\n"
+                            "After completing the three steps, output your final answer EXACTLY in this format on its own line:\n"
+                            "**Answer: (X) Label**"
+                        )
+                    else:
+                        question = (
+                            'Based on the expert knowledge provided, classify whether this is a Correct Patch or Incorrect Patch. '
+                            'After reasoning, output your final answer EXACTLY in this format:\n**Answer: (X) Label**'
+                        )
                     prompt_item = build_self_heuristic_prompt_item(
                         system_with_heuristics,
                         'Patch:\n' + data[id]['patch'],
-                        'Based on the expert knowledge provided, classify whether this is a Correct Patch or Incorrect Patch. After reasoning, output your final answer EXACTLY in this format:\n**Answer: (X) Label**'
+                        question,
                     )
                     ground_truth = data[id]['ground_truth']
                     prompts.append({'id': id, 'prompt': prompt_item, 'ground_truth': ground_truth})
