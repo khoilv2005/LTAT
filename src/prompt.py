@@ -164,10 +164,15 @@ def extract_heuristics(root, task, dataset, method='self-heuristic', n_samples_p
                 '2': 'Adjacent Network',
                 '3': 'Physical'
             }
-        elif dataset in ['AC', 'PR', 'UI']:
+        elif dataset in ['AC', 'PR']:
             class_names = {
                 '0': 'Not High',
                 '1': 'High'
+            }
+        elif dataset == 'UI':
+            class_names = {
+                '0': 'Not Required',
+                '1': 'Required'
             }
         else:
             class_names = {str(i): f'Class {i}' for i in range(10)}
@@ -362,7 +367,33 @@ Remember: Judge whether the patch actually fixes the intended bug, not whether t
         else:
             categories = "(A) Option A, (B) Option B"
 
-        system_base = f"""You are Frederick, an elite AI cybersecurity expert specializing in vulnerability severity evaluation based on CVSS v3.1 standards.
+        if task_type == 'CVSS' and dataset == 'UI' and variant in ('cvss-ui-v1', 'cvss-ui-v2'):
+            if variant == 'cvss-ui-v2':
+                ui_rule = """Important dataset-calibrated CVSS UI rule:
+- Choose (B) Required when the function appears reachable through a user-facing kernel interface or a user-triggered operation: syscall, ioctl, read/write handler, mount/remount, mmap/VMA, debugfs/procfs/sysfs write, file operation, user pointer (`__user`), `udata`, userspace buffer copy, memory-region registration, quota/file metadata write, or filesystem operation that services user-controlled files.
+- Choose (A) Not Required when the function is hardware/internal plumbing: probe/enumerate/init/remove, irq/interrupt, register read/write, protocol housekeeping, pure hash/tree/list/math conversion, internal lock/state helper, background worker cleanup, or helper code with no user-facing entry point.
+- Do not choose Required for a keyword alone. Prefer Required when multiple cues point to a user-facing entry point or when the description explicitly mentions user data, user pointer, ioctl, debugfs/sysfs/procfs write, mount, mmap, file write/read, or userspace buffer handling.
+
+Remember: balance precision and recall. Avoid labeling pure internal helpers as Required, but do not require an explicit click/open/browser-style victim action for this dataset."""
+            else:
+                ui_rule = """Important CVSS UI rule:
+- Choose (B) Required only when successful exploitation requires a human user, other than the attacker, to perform an action such as opening a crafted file, visiting a malicious page, clicking a link, loading content, or otherwise interacting with attacker-controlled data.
+- Choose (A) Not Required when the vulnerable function can be reached by the attacker directly through a request, packet, syscall, device operation, background processing, kernel-internal path, or already-triggered automated flow without a victim user's additional action.
+- Do not classify as Required merely because the function name or description contains "user", "userdata", "udata", filesystem, mmap, ioctl, write, read, VMA, page, or file. Those words may describe attacker-controlled input or kernel/user-space memory, not a separate victim interaction step.
+
+Remember: prefer (A) Not Required unless there is explicit evidence of an extra victim-user action required for exploitation."""
+            system_base = f"""You are Frederick, an elite AI cybersecurity expert specializing in CVSS v3.1 User Interaction (UI) assessment.
+
+Use the following domain knowledge as guidance when making your decision:
+
+{heuristics_text}
+
+CLASSIFICATION OPTIONS:
+{categories}
+
+{ui_rule}"""
+        else:
+            system_base = f"""You are Frederick, an elite AI cybersecurity expert specializing in vulnerability severity evaluation based on CVSS v3.1 standards.
 
 To ensure extreme accuracy, you MUST strictly follow this domain knowledge when making your decision:
 
@@ -740,10 +771,35 @@ def generate_prompt(root, task, dataset, method, max_tokens = 8000, TEST = 'vali
                     system_with_heuristics = extracted_heuristics['system_prompt']
                     clonze = '\n'.join(['Function: '+data[id]['function'],
                                         'Function description: '+data[id]['description']])
+                    if dataset == 'UI' and variant in ('cvss-ui-v1', 'cvss-ui-v2'):
+                        if variant == 'cvss-ui-v2':
+                            question = (
+                                "Analyze this function for the CVSS UI label in three steps:\n"
+                                "Step 1 (User-facing cues): List cues such as syscall/ioctl/read/write/mount/mmap/debugfs/sysfs/procfs/user pointer/udata/userspace buffer/filesystem user operation.\n"
+                                "Step 2 (Internal-only cues): List cues such as probe/init/irq/register/hardware/protocol housekeeping/hash/tree/math/internal helper/background cleanup.\n"
+                                "Step 3 (Verdict): Choose Required if Step 1 has stronger evidence; choose Not Required if Step 2 dominates or there is no clear user-facing entry point.\n"
+                                "After completing the three steps, output your final answer EXACTLY in this format on its own line:\n"
+                                "**Answer: (X) Label**"
+                            )
+                        else:
+                            question = (
+                                "Analyze this function for the CVSS v3.1 User Interaction metric in three steps:\n"
+                                "Step 1 (Reachability): Identify whether the function is reached directly by an attacker-controlled request/input path, or only after an additional victim-user action.\n"
+                                "Step 2 (Interaction evidence): List the concrete words in the function name/description that prove a separate victim user must act. If the evidence is only generic terms such as user, udata, file, ioctl, mmap, read, write, page, or VMA, say that this is not enough by itself.\n"
+                                "Step 3 (Verdict): Choose Required only if Step 2 found explicit victim-user action evidence; otherwise choose Not Required.\n"
+                                "After completing the three steps, output your final answer EXACTLY in this format on its own line:\n"
+                                "**Answer: (X) Label**"
+                            )
+                    else:
+                        question = (
+                            "Based on the expert knowledge provided, classify the function. "
+                            "After reasoning, output your final answer EXACTLY in this format:\n"
+                            "**Answer: (X) Label**"
+                        )
                     # Build prompt with custom system message
                     prompt_item = [
                         {'role': 'system', 'content': system_with_heuristics},
-                        {'role': 'user', 'content': 'I will give you a function context. Classify it based on the expert knowledge provided.\n\n' + clonze + '\n\nBased on the expert knowledge provided, classify the function. After reasoning, output your final answer EXACTLY in this format:\n**Answer: (X) Label**'}
+                        {'role': 'user', 'content': 'I will give you a function context. Classify it based on the expert knowledge provided.\n\n' + clonze + '\n\n' + question}
                     ]
                     ground_truth = data[id]['ground_truth']
                     prompts.append({'id': id, 'prompt': prompt_item, 'ground_truth': ground_truth})

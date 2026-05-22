@@ -459,3 +459,80 @@ Quay lại lộ trình ban đầu với điều chỉnh:
 
 Bài học từ Panther: trước khi áp dụng V7 cho task khác, nên **đo bias của baseline** (xem prediction distribution có lệch nhiều khỏi true distribution không). Nếu có bias rõ, V7 có khả năng cao thành công.
 
+
+---
+
+# Cập nhật CVSS UI — kế hoạch cải tiến precision
+
+## 28. Bối cảnh
+
+Task 3 CVSS UI trong `NT521.md` có điểm yếu chính ở class **Required**:
+
+| Metric | DeepSeek baseline | Paper GPT-4 |
+|---|---:|---:|
+| Required Recall | 0.8429 | 0.7714 |
+| Required Precision | 0.4538 | 0.8852 |
+
+Mẫu lỗi này khác APCA Invalidator: model không thiếu recall, mà đang predict **Required** quá rộng. Vì vậy không nên dùng prompt "debias cân bằng" kiểu APCA. Hướng đúng là precision-focused: chỉ chọn Required khi có bằng chứng về một hành động của victim user ngoài attacker.
+
+## 29. Thay đổi `cvss-ui-v1`
+
+- Sửa label khi rút heuristic cho dataset `UI`: từ generic `Not High/High` thành đúng CVSS UI label `Not Required/Required`.
+- Thêm variant `--variant cvss-ui-v1`.
+- Thêm manual expertise tại `expertise/CVSS_UI-manual-expertise.md`.
+- System prompt mới nhấn mạnh định nghĩa CVSS v3.1 UI:
+  - `Required`: cần một human user khác attacker mở/click/visit/load/preview/import/accept/install attacker-controlled content.
+  - `Not Required`: attacker tự trigger qua request/packet/syscall/ioctl/device/filesystem/background path.
+- User prompt mới bắt model phân tích 3 bước: reachability, evidence của victim action, verdict.
+- Cảnh báo các false-positive keyword: `user`, `udata`, `__user`, `mmap`, `VMA`, `ioctl`, `file`, `read`, `write`, `page` không đủ để kết luận Required.
+
+## 30. Lệnh chạy
+
+```powershell
+python run_self_heuristic.py `
+  --task cvss `
+  --dataset UI `
+  --variant cvss-ui-v1 `
+  --testNum 0 `
+  --model deepseek-v4-flash:cloud `
+  --api_url https://ollama.com/api/chat `
+  --max_token 2048 `
+  --max_requests_per_minute 30 `
+  --max_concurrent_requests 3 `
+  --max_attempts 8 `
+  --save_every 10 `
+  --result_root results
+```
+
+Eval:
+
+```powershell
+python eval.py --result_file results\cvss\cvss_UI_cvss-ui-v1_self-heuristic_test.json --task cvss --dataset UI
+python tools\compare_cvss_ui.py results\cvss\cvss_UI_cvss-ui-v1_self-heuristic_test.json cvss-ui-v1
+```
+
+## 31. Kỳ vọng và rủi ro
+
+Kỳ vọng chính là tăng Precision của class Required. Recall có thể giảm vì prompt thận trọng hơn. Đây là trade-off chấp nhận được nếu Macro-F1 và Required F1 tăng.
+
+Rủi ro: nếu dataset UI label thực tế đang encode "user-space reachable" thay vì đúng CVSS UI victim-action semantics, `cvss-ui-v1` có thể quá nghiêm và làm recall giảm mạnh. Vì vậy cần chạy full 359 mẫu rồi so sánh trước khi coi đây là cải tiến chính thức.
+
+## 32. Kết quả thực nghiệm CVSS UI
+
+Sau khi lấy lại `data/cvss` từ repo paper và chạy đủ 359 mẫu:
+
+| Variant | ACC | Macro-F1 | Precision Required | Recall Required | F1 Required | Unparsed |
+|---|---:|---:|---:|---:|---:|---:|
+| DeepSeek baseline (`NT521.md`) | 0.7716 | 0.7158 | 0.4538 | 0.8429 | n/a | 0 |
+| `cvss-ui-v1` strict victim-action | 0.8189 | 0.5161 | 1.0000 | 0.0714 | 0.1333 | 0 |
+| `cvss-ui-v2` dataset-calibrated | **0.8357** | **0.7659** | **0.5591** | 0.7429 | **0.6380** | 0 |
+| Paper GPT-4 | n/a | n/a | 0.8852 | 0.7714 | n/a | n/a |
+
+Kết luận:
+- `cvss-ui-v1` là negative result: quá strict, chỉ predict Required 5/70 mẫu Required.
+- `cvss-ui-v2` là cải tiến so với baseline DeepSeek: Accuracy +0.0641, Macro-F1 +0.0501, Precision Required +0.1053.
+- Trade-off: Recall Required giảm 0.10, từ 0.8429 xuống 0.7429.
+- Gap với paper vẫn còn lớn ở Precision Required (`0.5591` vs `0.8852`), nhưng hướng v2 đúng hơn v1 vì không phá recall.
+
+Khuyến nghị hiện tại: nếu muốn cải tiến CVSS UI, dùng `cvss-ui-v2`, không dùng `cvss-ui-v1`.
+

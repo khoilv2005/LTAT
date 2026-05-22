@@ -77,8 +77,8 @@ def parse_args():
     parser.add_argument('--dry_run', action='store_true',
                        help='Build prompts and exit without API calls')
     parser.add_argument('--variant', type=str, default=None,
-                       choices=[None, 'v1', 'v3', 'v4', 'v5', 'v7'],
-                       help='Improvement variant: v1=full-patch heuristics, v3=debiased prompt, v4=three-step reasoning, v5=v7+manual expertise (APCA), v7=v1+v3+v4 combined')
+                       choices=[None, 'v1', 'v3', 'v4', 'v5', 'v7', 'cvss-ui-v1', 'cvss-ui-v2'],
+                       help='Improvement variant: v1=full-patch heuristics, v3=debiased prompt, v4=three-step reasoning, v5=v7+manual expertise (APCA), v7=v1+v3+v4 combined, cvss-ui-v1/v2=CVSS UI expertise variants')
     parser.add_argument('--save_every', type=int, default=10,
                        help='Flush results to disk every N completed requests')
     return parser.parse_args()
@@ -162,7 +162,12 @@ async def run_self_heuristic_pipeline(args):
     # Variant-aware cache file: keep baseline cache untouched.
     # V5 reuses the V7 heuristics cache because it uses the same full-patch
     # extraction logic (variant in {'v1','v5','v7'} share extract_heuristics).
-    cache_variant = 'v7' if args.variant == 'v5' else args.variant
+    if args.variant == 'v5':
+        cache_variant = 'v7'
+    elif args.variant == 'cvss-ui-v2':
+        cache_variant = 'cvss-ui-v1'
+    else:
+        cache_variant = args.variant
     if cache_variant:
         heuristics_file = os.path.join(
             args.result_root, 'heuristics',
@@ -277,6 +282,31 @@ async def run_self_heuristic_pipeline(args):
             f"{extracted_text}"
         )
         print(f"\n[V5] Combined manual expertise ({len(manual_expertise)} chars) + "
+              f"learned heuristics ({len(extracted_text)} chars) = "
+              f"{len(heuristics_for_prompt)} chars")
+    elif args.variant in ('cvss-ui-v1', 'cvss-ui-v2') and task_type == 'CVSS' and args.dataset == 'UI':
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        manual_file = (
+            'CVSS_UI_v2-manual-expertise.md'
+            if args.variant == 'cvss-ui-v2'
+            else 'CVSS_UI-manual-expertise.md'
+        )
+        manual_path = os.path.join(project_root, 'expertise', manual_file)
+        if not os.path.exists(manual_path):
+            raise FileNotFoundError(
+                f"{args.variant} requires manual expertise file at {manual_path}"
+            )
+        with open(manual_path, encoding='utf-8') as f:
+            manual_expertise = f.read().strip()
+
+        heuristics_for_prompt = (
+            "## Part A: CVSS v3.1 UI metric expertise\n\n"
+            f"{manual_expertise}\n\n"
+            "---\n\n"
+            "## Part B: Learned heuristics from probe samples\n\n"
+            f"{extracted_text}"
+        )
+        print(f"\n[{args.variant}] Combined manual expertise ({len(manual_expertise)} chars) + "
               f"learned heuristics ({len(extracted_text)} chars) = "
               f"{len(heuristics_for_prompt)} chars")
 
