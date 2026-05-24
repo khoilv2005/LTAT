@@ -252,12 +252,13 @@ async def async_api_requests(
             if (
                 available_request_capacity >= 1
                 and available_token_capacity >= next_request_tokens
-                and status_tracker.num_tasks_in_progress <= max_concurrent_requests
+                and status_tracker.num_tasks_active < max_concurrent_requests
             ):
                 # update counters
                 available_request_capacity -= 1
                 available_token_capacity -= next_request_tokens
                 next_request.attempts_left -= 1
+                status_tracker.num_tasks_active += 1
 
                 # call API
                 asyncio.create_task(
@@ -311,6 +312,7 @@ class StatusTracker:
     num_other_errors: int = 0
     time_of_last_rate_limit_error: int = 0  # used to cool off after hitting rate limits
     num_results_since_save: int = 0
+    num_tasks_active: int = 0  # in-flight HTTP attempts, excludes queued retries
 
 @dataclass
 class APIRequest:
@@ -416,6 +418,7 @@ class APIRequest:
             status_tracker.num_tasks_succeeded += 1
             logging.debug(f"Request {self.request_id} saved to {save_filepath}")
             pbar.update(1)
+        status_tracker.num_tasks_active -= 1
 
 def load_results_file(results_json_file):
     for path in (results_json_file, results_json_file + '.backup'):
