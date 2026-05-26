@@ -36,6 +36,9 @@ def parse_args():
                         help='Dataset name (e.g., title_itape, Chromium, AV, APCA_quatrain)')
     parser.add_argument('--method', type=str, default='base',
                         help='Prompt method (base, expertise, summary, few-shot, info-manual, etc.)')
+    parser.add_argument('--variant', type=str, default=None,
+                        choices=[None, 'stable-v1', 'stable-v2', 'stable-v3'],
+                        help='Optional prompt improvement variant')
 
     # API Config
     parser.add_argument('--api_url', type=str,
@@ -145,6 +148,7 @@ async def main():
         TEST=args.TEST,
         testNum=args.testNum if args.testNum > 0 else 999999999,
         extracted_heuristics=extracted_heuristics,
+        variant=args.variant,
     )
     print(f"Generated {len(prompts)} prompts")
 
@@ -167,7 +171,11 @@ async def main():
         api_key=args.api_key,
         root_path=args.data_root,
         result_file_path=args.result_root,
-        result_file_name=f"{args.task}_{args.dataset}_{args.method}_{args.TEST}",
+        result_file_name=(
+            f"{args.task}_{args.dataset}_{args.variant}_{args.method}_{args.TEST}"
+            if args.variant else
+            f"{args.task}_{args.dataset}_{args.method}_{args.TEST}"
+        ),
         task=args.task,
         dataset=args.dataset,
         model=args.model,

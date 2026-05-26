@@ -31,3 +31,33 @@ Source metrics file: `results/metrics/cvss_UI_cvss-ui-v2_metrics.json`
 | Recall (Required) | 0.7429 |
 | F1 (Required) | 0.6380 |
 | Unparsed | 0 |
+
+## Task 6 Stable Patch Classification - stable-v3
+
+Source metrics file: `results/metrics/stable_v3_full_metrics.json`
+
+| Metric | Value |
+|---|---:|
+| Total samples | 10,895 |
+| Correct | 8,978 |
+| Accuracy | 0.8240 |
+| Precision | 0.8197 |
+| Recall | 0.8692 |
+| F1 | 0.8437 |
+| AUC | 0.8245 |
+| Unparsed | 59 |
+| True Positive | 5,069 |
+| False Positive | 1,115 |
+| False Negative | 763 |
+| True Negative | 3,948 |
+
+### Compared with local DeepSeek baseline
+
+| Metric | Baseline | stable-v3 | Delta |
+|---|---:|---:|---:|
+| Accuracy | 0.7734 | 0.8240 | +0.0506 |
+| Precision | 0.7552 | 0.8197 | +0.0645 |
+| Recall | 0.8553 | 0.8692 | +0.0139 |
+| F1 | 0.8021 | 0.8437 | +0.0416 |
+| AUC | 0.7680 | 0.8245 | +0.0565 |
+| Unparsed | 24 | 59 | +35 |

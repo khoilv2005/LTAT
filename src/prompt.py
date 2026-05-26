@@ -64,6 +64,67 @@ def build_self_heuristic_prompt_item(system_prompt, item_text, question):
         {'role': 'user', 'content': item_text + '\n\n' + question},
     ]
 
+def build_stable_variant_prompt_item(patch_text, variant):
+    """Build calibrated Linux stable patch classification prompts."""
+    if variant == 'stable-v3':
+        system_prompt = """You are Frederick, an expert Linux kernel stable-release patch reviewer.
+
+Your task is to decide whether a Linux kernel patch should be accepted into Linux -stable releases.
+
+ACK when the patch fixes a real kernel bug with clear incorrect behavior. The bug does not need to be a security issue or crash: stable-worthy fixes can include regressions, build failures, oops/crashes, hangs, data corruption, races/deadlocks, NULL/error-path bugs, incorrect return-value checks, resource leaks, off-by-one errors, broken hardware/driver behavior, broken user-visible behavior, or small correctness fixes that prevent bad states.
+
+Strong ACK evidence includes: Fixes tags, Cc stable, regression wording, Reported-by/Tested-by/Suggested-by tags, CVE/security wording, crash/oops/hang reports, data corruption, use-after-free, null pointer dereference, lock/race fixes, return-value/error-path fixes, resource leak fixes, boundary/off-by-one fixes, disabled unsupported behavior, or a small targeted backportable fix.
+
+NAK when the patch is mainly feature work, refactoring, cleanup, rename-only, comments/docs/formatting/whitespace, cosmetic change, broad redesign, new API, optional optimization, test-only change, or risky/invasive work whose stable bug-fix benefit is unclear.
+
+Do not NAK a patch just because the impact is moderate. If the commit message describes concrete incorrect behavior and the diff directly fixes it with a small targeted change, prefer ACK. Do not ACK a patch merely because it improves code quality without fixing a concrete bug."""
+    else:
+        system_prompt = """You are Frederick, an expert Linux kernel stable-release patch reviewer.
+
+Your task is to decide whether a Linux kernel patch should be accepted into Linux -stable releases.
+
+Use the Linux stable rule strictly: ACK only when the patch fixes a real user-impacting bug or regression, such as a build failure, oops/crash, hang, data corruption, security issue, serious resource leak, race/deadlock, broken hardware behavior, or another clear "oh, that's not good" issue.
+
+Strong ACK evidence includes: Fixes tags, Cc stable, regression language, Reported-by/Tested-by/Suggested-by tags, CVE/security wording, crash/oops/hang reports, data corruption, use-after-free, null pointer dereference, lock/race fixes, memory/resource leak fixes with real impact, or a small targeted backportable fix.
+
+Strong NAK evidence includes: feature work, refactoring, cleanup, rename-only changes, comments/docs/formatting/whitespace, cosmetic changes, broad redesigns, new APIs, optional optimizations, test-only changes, or risky/invasive changes whose stable benefit is unclear.
+
+Do not ACK a patch merely because it looks plausible or improves code quality. Do not NAK a minimal one-line patch if the commit message and diff show a real stable-worthy bug fix."""
+
+    if variant == 'stable-v2':
+        question = """Analyze this Linux kernel patch in three explicit steps:
+Step 1 (Bug evidence): Identify whether the commit message and diff show a real bug, regression, crash/oops/hang, data corruption, security issue, serious leak, race/deadlock, or broken user-visible behavior.
+Step 2 (Stable suitability): Decide whether the change is small, targeted, and backportable, or whether it is mainly feature work, cleanup, refactoring, rename-only, documentation/style, broad redesign, or otherwise risky.
+Step 3 (Verdict): ACK only when Step 1 finds stable-worthy bug evidence and Step 2 does not show strong NAK evidence.
+
+Output your final answer EXACTLY in this format on its own line:
+**Answer: (A) ACK**
+or
+**Answer: (B) NAK**"""
+    elif variant == 'stable-v3':
+        question = """Decide whether this Linux kernel patch should be accepted in Linux -stable releases.
+
+Use this priority:
+1. Prefer ACK for a concrete bug fix with direct, targeted code changes, even if the bug is a correctness/error-path/driver behavior issue rather than a crash.
+2. Prefer NAK for feature/refactor/cleanup/style/new API/optimization/test-only changes without a concrete bug being fixed.
+
+Output your final answer EXACTLY in this format on its own line:
+**Answer: (A) ACK**
+or
+**Answer: (B) NAK**"""
+    else:
+        question = """Based on the stable-release rules above, decide whether this Linux kernel patch should be accepted in Linux -stable releases.
+
+Output your final answer EXACTLY in this format on its own line:
+**Answer: (A) ACK**
+or
+**Answer: (B) NAK**"""
+
+    return [
+        {'role': 'system', 'content': system_prompt},
+        {'role': 'user', 'content': 'Linux kernel patch:\n' + patch_text + '\n\n' + question},
+    ]
+
 def extract_heuristics(root, task, dataset, method='self-heuristic', n_samples_per_class=5, variant=None):
     """
     Round 1 of self-heuristic: Extract classification rules from training examples.
@@ -511,6 +572,12 @@ def generate_prompt(root, task, dataset, method, max_tokens = 8000, TEST = 'vali
             clonze = data[id]['bug_report']
 
         elif dataset=='stable_patchnet':
+            if variant in ('stable-v1', 'stable-v2', 'stable-v3'):
+                prompt_item = build_stable_variant_prompt_item(data[id]['patch'], variant)
+                ground_truth = data[id]['ground_truth']
+                prompts.append({'id': id, 'prompt': prompt_item, 'ground_truth': ground_truth})
+                prompt_item_num += 1
+                continue
             if method=='summary':
                 nshot_file = os.path.join(root, task, dataset+'-nshot.json')
                 with open(nshot_file) as f:

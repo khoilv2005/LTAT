@@ -536,3 +536,132 @@ Kết luận:
 
 Khuyến nghị hiện tại: nếu muốn cải tiến CVSS UI, dùng `cvss-ui-v2`, không dùng `cvss-ui-v1`.
 
+
+---
+
+# Cập nhật Task 6 Stable Patch Classification
+
+## 33. Mục tiêu cải tiến
+
+Task 6 hiện tại đã hơn paper GPT-4 expertise ở ACC/P/F1/AUC, nhưng còn thấp hơn paper ở Recall và còn cách PatchNet khá xa:
+
+| Mốc | ACC | P | R | F1 | AUC |
+|---|---:|---:|---:|---:|---:|
+| Paper GPT-4 expertise | 0.7330 | 0.6790 | 0.9500 | 0.7920 | 0.7160 |
+| DeepSeek baseline full (`NT521.md`) | 0.7734 | 0.7552 | 0.8553 | 0.8021 | 0.7680 |
+| Paper PatchNet | 0.8620 | 0.8390 | 0.9070 | 0.8710 | 0.8600 |
+
+Vì stable patch classification ưu tiên không bỏ sót bug-fix cần backport, mục tiêu chính là tăng Recall/F1 nhưng không để Precision sụp như các prompt quá lỏng.
+
+## 34. Thay đổi đã thêm
+
+- Thêm `--variant stable-v1|stable-v2|stable-v3` cho `run.py`.
+- Thêm prompt builder riêng cho `stable_patchnet` trong `src/prompt.py`.
+- Thêm `tools/compare_stable.py` để tính ACC/P/R/F1/AUC, confusion matrix và xuất false cases.
+- Tải lại local `data/stable` từ repo paper để chạy thử nghiệm. Thư mục `data/` vẫn bị ignore, không push dataset.
+
+Ý nghĩa các variant:
+
+- `stable-v1`: manual stable-kernel rules, strict hơn prompt gốc, ép output parse sạch.
+- `stable-v2`: three-step reasoning. Kết quả âm tính với response cap 64 vì nhiều output bị cắt trước final answer.
+- `stable-v3`: calibrated recall prompt. ACK cho bug-fix có hành vi sai rõ, kể cả correctness/error-path/driver behavior, không chỉ crash/security.
+
+## 35. Kết quả thử nghiệm hiện tại
+
+Đã chạy full test set 10,895 mẫu cho `stable-v3`. Bảng dưới giữ thêm kết quả 500 mẫu đầu để theo dõi quá trình thử nghiệm:
+
+| Variant | Count | ACC | P | R | F1 | AUC | Unparsed |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `stable-v1` | 500 | 0.8280 | 0.8556 | 0.8309 | 0.8431 | 0.8276 | 0 |
+| `stable-v3` | 500 | **0.8320** | 0.8374 | **0.8705** | **0.8536** | **0.8294** | 2 |
+| `stable-v3` | 10,895 | **0.8240** | **0.8197** | **0.8692** | **0.8437** | **0.8245** | 59 |
+
+So với DeepSeek baseline full trong `NT521.md`:
+
+| Metric | Baseline full | `stable-v3` full | Delta |
+|---|---:|---:|---:|
+| ACC | 0.7734 | 0.8240 | +0.0506 |
+| P | 0.7552 | 0.8197 | +0.0645 |
+| R | 0.8553 | 0.8692 | +0.0139 |
+| F1 | 0.8021 | 0.8437 | +0.0416 |
+| AUC | 0.7680 | 0.8245 | +0.0565 |
+| Unparsed | 24 | 59 | +35 |
+
+So với paper:
+
+| Mốc | ACC | P | R | F1 | AUC |
+|---|---:|---:|---:|---:|---:|
+| Paper GPT-4 expertise | 0.7330 | 0.6790 | 0.9500 | 0.7920 | 0.7160 |
+| `stable-v3` full | **0.8240** | **0.8197** | 0.8692 | **0.8437** | **0.8245** |
+| Paper PatchNet | 0.8620 | 0.8390 | 0.9070 | 0.8710 | 0.8600 |
+
+`stable-v3` vượt paper GPT-4 ở ACC/P/F1/AUC, nhưng vẫn thấp hơn paper GPT-4 ở Recall. So với PatchNet, `stable-v3` vẫn thấp hơn mọi metric chính, nhưng đã thu hẹp gap đáng kể so với baseline DeepSeek.
+
+Negative/diagnostic result:
+
+| Variant | Count | ACC | P | R | F1 | AUC | Unparsed |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| baseline expertise with response cap 64 | 100 | 0.0300 | 0.5000 | 0.0455 | 0.0833 | 0.5049 | 95 |
+| `stable-v2` | 100 | 0.3900 | 0.7083 | 0.3864 | 0.5000 | 0.6307 | 54 |
+
+Nhận xét:
+
+- `stable-v1` parse sạch và precision cao, nhưng recall thấp hơn baseline full trong `NT521.md`, nên hơi quá nghiêm.
+- `stable-v3` tốt hơn baseline full ở toàn bộ metric chính: ACC +0.0506, Precision +0.0645, Recall +0.0139, F1 +0.0416, AUC +0.0565.
+- `stable-v3` tốt hơn `stable-v1` trên cùng 500 mẫu: Recall +0.0396, F1 +0.0105, AUC +0.0018, đổi lại Precision -0.0182.
+- `stable-v2` không nên dùng với `response_max_token=64`. Nếu muốn nghiên cứu tiếp, phải tăng response cap hoặc bắt final answer đứng trước reasoning.
+
+## 36. Lệnh chạy lại
+
+Chạy 500 mẫu:
+
+```powershell
+python run.py `
+  --task stable `
+  --dataset stable_patchnet `
+  --method expertise `
+  --variant stable-v3 `
+  --TEST test `
+  --testNum 500 `
+  --api_url https://ollama.com/api/chat `
+  --model deepseek-v4-flash:cloud `
+  --max_requests_per_minute 30 `
+  --max_tokens_per_minute 1000000 `
+  --max_concurrent_requests 4 `
+  --max_attempts 10 `
+  --response_max_token 64 `
+  --save_every 50
+```
+
+Eval:
+
+```powershell
+python tools\compare_stable.py `
+  results\stable_stable_patchnet_stable-v3_expertise_test.json `
+  stable-v3-500 `
+  --metrics-output results\metrics\stable_v3_500_metrics.json `
+  --false-output results\metrics\stable_v3_500_false_cases.json
+```
+
+Full test:
+
+```powershell
+python run.py `
+  --task stable `
+  --dataset stable_patchnet `
+  --method expertise `
+  --variant stable-v3 `
+  --TEST test `
+  --testNum 0 `
+  --api_url https://ollama.com/api/chat `
+  --model deepseek-v4-flash:cloud `
+  --max_requests_per_minute 30 `
+  --max_tokens_per_minute 1000000 `
+  --max_concurrent_requests 4 `
+  --max_attempts 10 `
+  --response_max_token 64 `
+  --save_every 500
+```
+
+Khuyến nghị hiện tại: dùng `stable-v3` làm cải tiến chính cho task 6.
+
