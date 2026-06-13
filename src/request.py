@@ -195,9 +195,17 @@ async def async_api_requests(
     timeout = aiohttp.ClientTimeout(total=300, connect=30, sock_connect=30, sock_read=240)
     session = aiohttp.ClientSession(timeout=timeout)
     while(True):
+        if status_tracker.fatal_error:
+            not_finished = False
+            if next_request is not None:
+                status_tracker.num_tasks_in_progress -= 1
+                next_request = None
+
         # get next request (if one is not already waiting for capacity)
         if next_request is None:
-            if not queue_of_requests_to_retry.empty(): 
+            if status_tracker.fatal_error:
+                pass
+            elif not queue_of_requests_to_retry.empty(): 
                 next_request = queue_of_requests_to_retry.get_nowait()
                 logging.debug(f"Retrying request {next_request.request_id}: {next_request}")
             elif (not_finished):
@@ -297,6 +305,7 @@ async def async_api_requests(
     logging.info(f"""Parallel processing complete. Results saved to {results_json_file}""")
     if status_tracker.num_tasks_failed > 0:
         logging.warning(f"{status_tracker.num_tasks_failed} / {status_tracker.num_tasks_started} requests failed. Errors logged to {results_json_file}.")
+        raise RuntimeError(status_tracker.fatal_error_message or "Request failed after all retry attempts")
     if status_tracker.num_rate_limit_errors > 0:
         logging.warning(f"{status_tracker.num_rate_limit_errors} rate limit errors received. Consider running at a lower rate.")
 
@@ -313,6 +322,8 @@ class StatusTracker:
     time_of_last_rate_limit_error: int = 0  # used to cool off after hitting rate limits
     num_results_since_save: int = 0
     num_tasks_active: int = 0  # in-flight HTTP attempts, excludes queued retries
+    fatal_error: bool = False
+    fatal_error_message: str = ""
 
 @dataclass
 class APIRequest:
@@ -385,19 +396,12 @@ class APIRequest:
             if self.attempts_left:
                 retry_queue.put_nowait(self)
             else:
-                logging.error(f"Request {self.request_json} failed after all attempts. Saving errors: {self.result}")
-                data = (
-                    [self.request_json, [str(e) for e in self.result], self.metadata]
-                    if self.metadata
-                    else [self.request_json, [str(e) for e in self.result]]
+                status_tracker.fatal_error = True
+                status_tracker.fatal_error_message = (
+                    f"Request {self.request_id} failed after all retry attempts. "
+                    "Stopping job without saving a failed result item."
                 )
-                # print(data)
-                result = {'id': self.request_id, 'ground_truth':self.request_truth, 'prompt': self.request_json, 'response': _json_safe(response_data)}
-                async with write_lock:
-                    self.results_list.append(result)
-                    status_tracker.num_results_since_save += 1
-                    write_file(self.results_list, save_filepath)
-                    status_tracker.num_results_since_save = 0
+                logging.error(f"{status_tracker.fatal_error_message} Errors: {self.result}")
                 status_tracker.num_tasks_in_progress -= 1
                 status_tracker.num_tasks_failed += 1
         else:

@@ -19,6 +19,22 @@ METRIC_ROOT="$ROOT/results/metrics/gemini3"
 LOG_DIR="$RESULT_ROOT/parallel_logs"
 mkdir -p "$BASELINE_ROOT" "$RAG_ROOT" "$METRIC_ROOT" "$LOG_DIR"
 
+stop_all() {
+  local reason="$1"
+  echo "FATAL: $reason"
+  local pids
+  pids="$(jobs -pr)"
+  if [[ -n "$pids" ]]; then
+    # shellcheck disable=SC2086
+    kill $pids 2>/dev/null || true
+    # shellcheck disable=SC2086
+    wait $pids 2>/dev/null || true
+  fi
+  exit 1
+}
+
+trap 'stop_all "received termination signal"' INT TERM
+
 JOBS=(
   "gemini3_baseline_sbrp_ambari|baseline|SBRP|Ambari|expertise|0|500|"
   "gemini3_baseline_sbrp_camel|baseline|SBRP|Camel|expertise|0|500|"
@@ -156,13 +172,17 @@ for spec in "${JOBS[@]}"; do
   run_job "$spec" &
   active=$((active + 1))
   if [[ "$active" -ge "$MAX_PARALLEL_JOBS" ]]; then
-    wait -n
+    if ! wait -n; then
+      stop_all "a job failed; stopping all remaining Gemini jobs"
+    fi
     active=$((active - 1))
   fi
 done
 
 while [[ "$active" -gt 0 ]]; do
-  wait -n
+  if ! wait -n; then
+    stop_all "a job failed; stopping all remaining Gemini jobs"
+  fi
   active=$((active - 1))
 done
 

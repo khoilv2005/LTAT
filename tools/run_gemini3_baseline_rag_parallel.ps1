@@ -156,6 +156,20 @@ foreach ($job in $Jobs) {
 
 $Running = @()
 
+function Stop-AllRunning {
+    param([string]$Reason)
+    Write-Host "FATAL: $Reason"
+    foreach ($entry in $Running) {
+        try {
+            $entry.Process.Refresh()
+            if (-not $entry.Process.HasExited) {
+                Stop-Process -Id $entry.Process.Id -Force -ErrorAction SilentlyContinue
+            }
+        } catch {}
+    }
+    exit 1
+}
+
 while ($Pending.Count -gt 0 -or $Running.Count -gt 0) {
     while ($Pending.Count -gt 0 -and $Running.Count -lt $MaxParallelJobs) {
         $job = $Pending.Dequeue()
@@ -181,6 +195,7 @@ while ($Pending.Count -gt 0 -or $Running.Count -gt 0) {
                 Invoke-Eval -Job $entry.Job -ResultPath $entry.ResultPath
             } else {
                 Write-Host "FAILED run $($entry.Job.Name) stderr=$($entry.Err)"
+                Stop-AllRunning "a job failed; stopping all remaining Gemini jobs"
             }
         } else {
             $StillRunning += $entry
