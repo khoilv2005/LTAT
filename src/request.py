@@ -73,7 +73,7 @@ def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
     """Returns the number of tokens used by a list of messages."""
     # Check if model is known or uses cl100k_base encoding
     known_models = ['gpt-3.5-turbo', 'gpt-4', 'gpt-3.5-turbo-0301', 'gpt-4-0314']
-    uses_cl100k = any(x in model.lower() for x in ['gpt-3.5', 'gpt-4', 'minimax', 'glm', 'ollama', 'nemotron', 'qwen', 'deepseek'])
+    uses_cl100k = any(x in model.lower() for x in ['gpt-3.5', 'gpt-4', 'minimax', 'glm', 'ollama', 'nemotron', 'qwen', 'deepseek', 'gemini'])
 
     if not uses_cl100k and model not in known_models:
         raise NotImplementedError(f"""num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.""")
@@ -95,7 +95,7 @@ def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
         tokens_per_name = 1
     elif 'gpt-3.5' in model:
         return num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301")
-    elif 'minimax' in model.lower() or 'glm' in model.lower() or 'ollama' in model.lower() or 'nemotron' in model.lower() or 'qwen' in model.lower() or 'deepseek' in model.lower():
+    elif 'minimax' in model.lower() or 'glm' in model.lower() or 'ollama' in model.lower() or 'nemotron' in model.lower() or 'qwen' in model.lower() or 'deepseek' in model.lower() or 'gemini' in model.lower():
         # Ollama/glm/nemotron/qwen uses cl100k_base encoding, same as GPT-3.5
         tokens_per_message = 4
         tokens_per_name = -1

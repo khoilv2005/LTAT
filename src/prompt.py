@@ -471,7 +471,7 @@ Remember: You must heavily penalize the classification unless there is CLEAR evi
     return system_base
 
 
-def generate_prompt(root, task, dataset, method, max_tokens = 8000, TEST = 'vali', testNum = 1, extracted_heuristics=None, variant=None):
+def generate_prompt(root, task, dataset, method, max_tokens = 8000, TEST = 'vali', testNum = 1, start_index = 0, extracted_heuristics=None, variant=None):
     task = normalize_task_name(task)
     method = normalize_method_name(method)
 
@@ -496,7 +496,9 @@ def generate_prompt(root, task, dataset, method, max_tokens = 8000, TEST = 'vali
     
     prompts = []
     prompt_item_num = 0
-    for id in tqdm(data):
+    for row_index, id in enumerate(tqdm(data)):
+        if row_index < start_index:
+            continue
         if prompt_item_num >= testNum:
             break
         prompt_item = prompt[:-1]

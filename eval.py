@@ -133,6 +133,55 @@ def infer_sbrp_from_reasoning(text):
 
     return None
 
+def infer_apca_from_reasoning(text):
+    """Infer APCA labels from reasoning when no explicit CoF/NCF label exists."""
+    if text is None:
+        return None
+
+    lower = str(text).lower()
+
+    negative_patterns = [
+        r"\bdoes not fix\b",
+        r"\bdoesn't fix\b",
+        r"\bdoes not address\b.*\broot cause\b",
+        r"\bdoesn't address\b.*\broot cause\b",
+        r"\bnot address\b.*\broot cause\b",
+        r"\bdoes not resolve\b",
+        r"\bdoesn't resolve\b",
+        r"\bnot a correct fix\b",
+        r"\bnot a valid fix\b",
+        r"\bincorrect patch\b",
+        r"\bdead code\b",
+        r"\barbitrary (?:condition|constant|change|return)\b",
+        r"\bunrelated change\b",
+        r"\bremoves essential\b",
+        r"\bbreaks (?:the )?(?:intended )?behavior\b",
+        r"\breturns? (?:an )?uninitialized\b",
+        r"\boverfitted\b",
+        r"\bmasks (?:the )?(?:bug|problem|symptom)\b",
+    ]
+    for pattern in negative_patterns:
+        if re.search(pattern, lower):
+            return '0'
+
+    positive_patterns = [
+        r"\bdirectly fixes\b",
+        r"\bdirectly addresses\b.*\broot cause\b",
+        r"\baddresses the root cause\b",
+        r"\bcorrectly fixes\b",
+        r"\bvalid fix\b",
+        r"\bcoherent fix\b",
+        r"\bpreserves intended behavior\b",
+        r"\bdoes not introduce (?:a |any )?new (?:bug|problem|issue)\b",
+        r"\bminimal (?:and )?targeted\b",
+        r"\bstraightforward (?:defensive )?(?:null )?check\b",
+    ]
+    for pattern in positive_patterns:
+        if re.search(pattern, lower):
+            return '1'
+
+    return None
+
 
 def normalize_prediction(pred, task, dataset):
     """Normalize prediction to match ground truth format."""
@@ -236,6 +285,9 @@ def normalize_prediction(pred, task, dataset):
             return '0'
         elif 'cof' in pred_lower or 'correct' in pred_lower:
             return '1'
+        inferred = infer_apca_from_reasoning(pred_lower)
+        if inferred is not None:
+            return inferred
 
     elif task_normalized == 'stable':
         if 'ack' in pred_lower or 'true' in pred_lower:

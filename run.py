@@ -67,6 +67,8 @@ def parse_args():
                         help='Test split to use')
     parser.add_argument('--testNum', type=int, default=1,
                         help='Number of test samples (0 = all)')
+    parser.add_argument('--start_index', type=int, default=0,
+                        help='Zero-based offset into the selected split')
     parser.add_argument('--dry_run', action='store_true',
                         help='Generate prompts and exit without calling the API')
     parser.add_argument('--heuristics_file', type=str, default=None,
@@ -147,6 +149,7 @@ async def main():
         max_tokens=args.max_token,
         TEST=args.TEST,
         testNum=args.testNum if args.testNum > 0 else 999999999,
+        start_index=args.start_index,
         extracted_heuristics=extracted_heuristics,
         variant=args.variant,
     )

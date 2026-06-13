@@ -1,0 +1,63 @@
+rag:
+  retriever: tfidf
+  top_k_per_label: 3
+  context_max_chars: 6000
+  example_max_chars: 900
+  retrieval_max_query_terms: 80
+  label_balanced: true
+  use_rules: true
+  use_examples: true
+  prevent_test_leakage: true
+  exclude_same_id: true
+
+stable:
+  index_splits:
+    - train-part-1
+    - train-part-2
+    - probe
+  result_name: stable_stable_patchnet_rag-bm25_expertise_test
+
+sbrp:
+  index_splits:
+    - train
+    - probe
+  result_name_prefix: SBRP_rag-bm25
+
+apca:
+  index_splits:
+    - train
+    - probe
+  top_k_per_label: 2
+  context_max_chars: 3500
+  example_max_chars: 650
+  retrieval_max_query_terms: 80
+  result_name_prefix: APCA_rag-bm25
+
+cvss:
+  index_splits:
+    - probe
+  top_k_per_label: 3
+  context_max_chars: 4500
+  example_max_chars: 650
+  retrieval_max_query_terms: 80
+  result_name_prefix: cvss_rag-bm25
+
+vulfix:
+  index_splits:
+    - probe
+  top_k_per_label: 3
+  context_max_chars: 5000
+  example_max_chars: 1100
+  retrieval_max_query_terms: 100
+  result_name_prefix: vulfix_rag-bm25
+
+title:
+  index_splits:
+    - train-part-1
+    - train-part-2
+    - probe
+  top_k: 5
+  context_max_chars: 6000
+  example_max_chars: 900
+  retrieval_max_query_terms: 100
+  result_name_prefix: title_rag-bm25
