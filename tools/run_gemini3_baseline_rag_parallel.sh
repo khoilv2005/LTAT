@@ -12,10 +12,11 @@ if [[ ! -x "$PYTHON" ]]; then
   PYTHON="python3"
 fi
 
-RESULT_ROOT="$ROOT/results/gemini3"
+RESULT_NAMESPACE="${RESULT_NAMESPACE:-gemini3}"
+RESULT_ROOT="$ROOT/results/$RESULT_NAMESPACE"
 BASELINE_ROOT="$RESULT_ROOT/baseline"
 RAG_ROOT="$RESULT_ROOT/rag"
-METRIC_ROOT="$ROOT/results/metrics/gemini3"
+METRIC_ROOT="$ROOT/results/metrics/$RESULT_NAMESPACE"
 LOG_DIR="$RESULT_ROOT/parallel_logs"
 mkdir -p "$BASELINE_ROOT" "$RAG_ROOT" "$METRIC_ROOT" "$LOG_DIR"
 

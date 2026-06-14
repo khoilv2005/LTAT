@@ -12,6 +12,7 @@ import numpy as np
 import argparse
 import aiohttp
 import asyncio  # for running API calls concurrently
+import subprocess
 from dataclasses import dataclass, field  # for storing API inputs, outputs, and metadata
 import shutil
 import os
@@ -27,6 +28,31 @@ time_tag = time.strftime("%m%d%H%M", time.localtime())
 def build_chat_request_payload(model, messages, temperature=0, choices=1, max_token=8000, request_url=""):
     """Build a provider-specific chat payload without changing result parsing."""
     request_url_lower = (request_url or "").lower()
+    if "aiplatform.googleapis.com" in request_url_lower:
+        system_parts = []
+        contents = []
+        for message in messages:
+            role = message.get("role", "user")
+            content = str(message.get("content", ""))
+            if role == "system":
+                system_parts.append({"text": content})
+            else:
+                vertex_role = "model" if role == "assistant" else "user"
+                contents.append({"role": vertex_role, "parts": [{"text": content}]})
+        payload = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": temperature,
+                "topP": 1,
+                "maxOutputTokens": max_token,
+            },
+        }
+        if system_parts:
+            payload["systemInstruction"] = {"parts": system_parts}
+        if choices and choices > 1:
+            payload["generationConfig"]["candidateCount"] = choices
+        return payload
+
     payload = {
         "model": model,
         "messages": messages,
@@ -50,6 +76,19 @@ def resolve_api_key(api_key, request_url=""):
         return api_key
 
     request_url_lower = (request_url or "").lower()
+    if "aiplatform.googleapis.com" in request_url_lower:
+        for env_name in ["VERTEX_ACCESS_TOKEN", "GOOGLE_OAUTH_ACCESS_TOKEN"]:
+            value = os.environ.get(env_name)
+            if value:
+                return value
+        command = os.environ.get("VERTEX_ACCESS_TOKEN_COMMAND", "gcloud auth print-access-token")
+        try:
+            token = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.DEVNULL).strip()
+            if token:
+                return token
+        except Exception:
+            pass
+
     env_candidates = []
     if "openai" in request_url_lower:
         env_candidates.append("OPENAI_API_KEY")
@@ -66,7 +105,7 @@ def resolve_api_key(api_key, request_url=""):
 
     raise ValueError(
         "API key not provided. Set OPENAI_API_KEY, MINIMAX_API_KEY, "
-        "OLLAMA_API_KEY, or pass --api_key."
+        "OLLAMA_API_KEY, VERTEX_ACCESS_TOKEN, or pass --api_key."
     )
 
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
@@ -135,6 +174,7 @@ async def async_api_requests(
     data = None,
     ):
 
+    vertex_auth = "aiplatform.googleapis.com" in (request_url or "").lower() and not api_key
     api_key = resolve_api_key(api_key, request_url)
     """Processes API requests in parallel, throttling to stay under rate limits."""
     # constants
@@ -143,6 +183,8 @@ async def async_api_requests(
 
     # infer API endpoint and construct request header
     request_header = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    if vertex_auth:
+        request_header["X-Refresh-Vertex-Token"] = "1"
 
     # initialize trackers
     queue_of_requests_to_retry = asyncio.Queue()
@@ -355,16 +397,19 @@ class APIRequest:
         error = None
         response_data = {}
         try:
+            post_header = dict(request_header)
+            if post_header.pop("X-Refresh-Vertex-Token", None):
+                post_header["Authorization"] = f"Bearer {resolve_api_key(None, request_url)}"
             if session is None:
                 timeout = aiohttp.ClientTimeout(total=300, connect=30, sock_connect=30, sock_read=240)
                 async with aiohttp.ClientSession(timeout=timeout) as owned_session:
                     async with owned_session.post(
-                        url=request_url, headers=request_header, json=self.request_json
+                        url=request_url, headers=post_header, json=self.request_json
                     ) as http_response:
                         text = await http_response.text()
             else:
                 async with session.post(
-                    url=request_url, headers=request_header, json=self.request_json
+                    url=request_url, headers=post_header, json=self.request_json
                 ) as http_response:
                     text = await http_response.text()
 

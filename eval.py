@@ -332,6 +332,10 @@ def response_content(response):
         choices = response.get('choices', [])
         if choices:
             return choices[0].get('message', {}).get('content', '')
+        candidates = response.get('candidates', [])
+        if candidates:
+            parts = candidates[0].get('content', {}).get('parts', [])
+            return ''.join(str(part.get('text', '')) for part in parts)
         if 'message' in response and isinstance(response['message'], dict):
             return response['message'].get('content', '')
         if 'response' in response:
@@ -372,18 +376,7 @@ def evaluate_title(results):
         ground_truth = str(item.get('ground_truth', '')).strip()
         response = item.get('response', {})
 
-        if isinstance(response, dict):
-            choices = response.get('choices', [])
-            if choices:
-                content = choices[0].get('message', {}).get('content', '').strip()
-            elif 'message' in response and isinstance(response['message'], dict):
-                content = response['message'].get('content', '').strip()
-            elif 'response' in response:
-                content = response.get('response', '').strip()
-            else:
-                content = ''
-        else:
-            content = str(response).strip()
+        content = response_content(response).strip()
 
         if not content or not ground_truth:
             continue
