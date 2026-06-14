@@ -45,6 +45,7 @@ def build_chat_request_payload(model, messages, temperature=0, choices=1, max_to
                 "temperature": temperature,
                 "topP": 1,
                 "maxOutputTokens": max_token,
+                "thinkingConfig": {"thinkingBudget": 0},
             },
         }
         if system_parts:

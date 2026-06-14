@@ -2,7 +2,8 @@ param(
     [string]$ApiUrl = "https://ollama.com/api/chat",
     [string]$Model = "gemini-3-flash-preview:cloud",
     [int]$MaxParallelJobs = 3,
-    [int]$ResponseMaxToken = 512
+    [int]$ResponseMaxToken = 512,
+    [string]$ResultNamespace = "gemini3"
 )
 
 $ErrorActionPreference = "Continue"
@@ -12,10 +13,10 @@ if (-not (Test-Path $Python)) {
     $Python = "python"
 }
 
-$ResultRoot = Join-Path $Root "results\gemini3"
+$ResultRoot = Join-Path $Root "results\$ResultNamespace"
 $BaselineRoot = Join-Path $ResultRoot "baseline"
 $RagRoot = Join-Path $ResultRoot "rag"
-$MetricRoot = Join-Path $Root "results\metrics\gemini3"
+$MetricRoot = Join-Path $Root "results\metrics\$ResultNamespace"
 $LogDir = Join-Path $ResultRoot "parallel_logs"
 New-Item -ItemType Directory -Force -Path $BaselineRoot, $RagRoot, $MetricRoot, $LogDir | Out-Null
 
