@@ -3,7 +3,9 @@ param(
     [string]$Model = "gemini-3-flash-preview:cloud",
     [int]$MaxParallelJobs = 3,
     [int]$ResponseMaxToken = 512,
-    [string]$ResultNamespace = "gemini3"
+    [string]$ResultNamespace = "gemini3",
+    [int]$MaxRequestsPerMinute = 30,
+    [int]$MaxTokensPerMinute = 1000000
 )
 
 $ErrorActionPreference = "Continue"
@@ -91,8 +93,8 @@ function Get-RunArgs {
             "--api_url", $ApiUrl,
             "--model", $Model,
             "--result_root", $BaselineRoot,
-            "--max_requests_per_minute", "30",
-            "--max_tokens_per_minute", "1000000",
+            "--max_requests_per_minute", [string]$MaxRequestsPerMinute,
+            "--max_tokens_per_minute", [string]$MaxTokensPerMinute,
             "--max_concurrent_requests", "1",
             "--save_every", "25",
             "--response_max_token", [string]$ResponseMaxToken
@@ -109,8 +111,8 @@ function Get-RunArgs {
         "--model", $Model,
         "--result_root", $RagRoot,
         "--result_file_name", $Job.Name,
-        "--max_requests_per_minute", "30",
-        "--max_tokens_per_minute", "1000000",
+        "--max_requests_per_minute", [string]$MaxRequestsPerMinute,
+        "--max_tokens_per_minute", [string]$MaxTokensPerMinute,
         "--max_concurrent_requests", "1",
         "--save_every", "25",
         "--response_max_token", [string]$ResponseMaxToken

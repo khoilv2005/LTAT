@@ -428,7 +428,13 @@ class APIRequest:
                 )
                 status_tracker.num_api_errors += 1
                 error = response_data
-                if "rate limit" in error_message.lower() or "too many concurrent" in error_message.lower():
+                if (
+                    "rate limit" in error_message.lower()
+                    or "too many concurrent" in error_message.lower()
+                    or "resource exhausted" in error_message.lower()
+                    or response_data.get("status") == "RESOURCE_EXHAUSTED"
+                    or response_data.get("code") == 429
+                ):
                     status_tracker.time_of_last_rate_limit_error = time.time()
                     status_tracker.num_rate_limit_errors += 1
                     status_tracker.num_api_errors -= 1  # rate limit errors are counted separately
